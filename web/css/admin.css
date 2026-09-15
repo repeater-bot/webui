@@ -1,0 +1,192 @@
+/*
+ * Admin 页面样式
+ */
+
+@layer page {
+  /* 仅 admin 页面禁止 body 滚动，所有滚动交给内部组件 */
+  html,
+  body {
+    overflow: hidden;
+  }
+
+  .main.admin-main {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--topbar-h));
+    padding: var(--gap-lg);
+    gap: var(--gap);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* 顶部提示 */
+  .admin-warning {
+    flex-shrink: 0;
+    padding: var(--gap-sm) var(--gap);
+    background: var(--danger-light);
+    border: 1px solid var(--danger);
+    border-left: 4px solid var(--danger);
+    color: var(--text);
+    font-size: var(--fs-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--gap);
+  }
+
+  .admin-warning .admin-warning-title {
+    font-weight: 600;
+    color: var(--danger);
+  }
+
+  /* 分类标题 */
+  .admin-section-title {
+    grid-column: 1 / -1;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 4px;
+    margin-top: var(--gap-sm);
+    border-bottom: 1px dashed var(--border);
+  }
+
+  /* 操作卡片 */
+  .admin-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    padding: var(--gap);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    transition: all var(--transition);
+  }
+
+  .admin-card:hover {
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .admin-card.danger {
+    border-left: 3px solid var(--danger);
+  }
+
+  .admin-card.warning {
+    border-left: 3px solid var(--warning);
+  }
+
+  .admin-card-title {
+    font-size: var(--fs-base);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .admin-card.danger .admin-card-title { color: var(--danger); }
+
+  .admin-card-endpoint {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    word-break: break-all;
+  }
+
+  .admin-card-endpoint .method {
+    display: inline-block;
+    min-width: 50px;
+    padding: 1px 6px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text-invert);
+    background: var(--accent);
+    margin-right: 6px;
+  }
+
+  .admin-card-endpoint .method.get    { background: var(--success); }
+  .admin-card-endpoint .method.post   { background: var(--accent); }
+  .admin-card-endpoint .method.put    { background: var(--warning); }
+  .admin-card-endpoint .method.delete { background: var(--danger); }
+
+  .admin-card-desc {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .admin-card-actions {
+    display: flex;
+    gap: var(--gap-sm);
+    margin-top: var(--gap-sm);
+  }
+
+  /* 结果面板 */
+  .admin-result {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    max-height: 40vh;
+    overflow: hidden;
+  }
+  
+  /* 中间可滚动区域 */
+  .admin-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 4px;   /* 给滚动条留点空隙 */
+  }
+
+  .admin-result.collapsed .admin-result-body { display: none; }
+
+  .admin-result-header {
+    padding: var(--gap-sm) var(--gap);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .admin-result-header .admin-result-toggle {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    transition: transform var(--transition);
+    transform: rotate(90deg);
+  }
+
+  .admin-result.collapsed .admin-result-header .admin-result-toggle {
+    transform: rotate(0deg);
+  }
+
+  .admin-result-body {
+    padding: var(--gap);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .admin-result-body .admin-result-status {
+    display: inline-block;
+    padding: 1px 6px;
+    margin-right: 8px;
+    font-weight: 600;
+    color: var(--text-invert);
+    background: var(--text-dim);
+  }
+
+  .admin-result-body .admin-result-status.ok  { background: var(--success); }
+  .admin-result-body .admin-result-status.bad { background: var(--danger); }
+  .admin-result-body .admin-result-status.pending { background: var(--warning); }
+}

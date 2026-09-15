@@ -1,0 +1,204 @@
+/*
+ * 磁贴：整个项目的统一容器形态
+ * .tile      块状（导航 / 状态 / 配置项）
+ * .tile-item 行状（菜单项 / 列表项 / Tab）
+ * 两者共享基础，只写差异
+ */
+
+@layer components {
+  /* ---------- 共享基础 ---------- */
+  .tile,
+  .tile-item {
+    display: block;
+    background: var(--bg-tile);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      background var(--transition),
+      border-color var(--transition),
+      box-shadow var(--transition),
+      transform var(--transition);
+  }
+
+  .tile:hover,
+  .tile-item:hover {
+    background: var(--bg-tile-hover);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-hover);
+  }
+
+  .tile:active,
+  .tile-item:active {
+    box-shadow: var(--shadow-active);
+  }
+
+  /* ---------- 块状磁贴 ---------- */
+  .tile {
+    padding: var(--gap-lg);
+  }
+
+  .tile:hover {
+    transform: translateY(var(--tile-lift));
+  }
+
+  .tile:active {
+    transform: translateY(0);
+  }
+
+  .tile-title {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: var(--gap-sm);
+  }
+
+  .tile-desc {
+    font-size: var(--fs-sm);
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* 无描述时标题不占下边距 */
+  .tile-title:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ---------- 网格容器 ---------- */
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(var(--tile-min), 1fr));
+    gap: var(--gap);
+  }
+
+  /* ---------- 行状磁贴 ---------- */
+  .tile-item {
+    display: flex;
+    align-items: center;
+    padding: 9px 12px;
+    border-left: 3px solid transparent;
+    font-size: var(--fs-base);
+    color: var(--text);
+  }
+
+  .tile-item:hover {
+    border-left-color: var(--border-hover);
+    transform: translateX(var(--tile-shift));
+  }
+
+  .tile-item.active {
+    background: var(--accent-light);
+    border-left-color: var(--accent);
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+
+  .tile-item.active:hover {
+    transform: none;
+  }
+
+  .tile-item-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tile-item-suffix {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    margin-left: var(--gap-sm);
+  }
+
+  /* ---------- Tab 容器 ---------- */
+  .tile-tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: var(--gap);
+  }
+
+  .tile-tabs .tile-item {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 9px 18px;
+  }
+
+  .tile-tabs .tile-item:hover {
+    border-bottom-color: var(--border-hover);
+    transform: none;
+    box-shadow: none;
+  }
+
+  .tile-tabs .tile-item.active {
+    border-bottom-color: var(--accent);
+    background: var(--accent-light);
+    color: var(--accent-hover);
+  }
+
+  /* ---------- 磁贴尺寸修饰 ---------- */
+  .tile-span-2 { grid-column: span 2; }
+  .tile-span-3 { grid-column: span 3; }
+  .tile-span-full { grid-column: 1 / -1; }
+
+  .tile-sm { padding: var(--gap); }
+  .tile-lg { padding: var(--gap-xl); }
+
+  /* ---------- 磁贴状态 ---------- */
+  .tile.is-disabled,
+  .tile-item.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  /* ---------- 磁贴内部：键值对 ---------- */
+  .kv {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--gap);
+    padding: 4px 0;
+    font-size: var(--fs-sm);
+  }
+
+  .kv + .kv {
+    border-top: 1px dashed var(--border);
+  }
+
+  .kv-key {
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .kv-value {
+    color: var(--text);
+    font-weight: 500;
+    text-align: right;
+    word-break: break-all;
+  }
+
+  .kv-value.is-success { color: var(--success); }
+  .kv-value.is-warning { color: var(--warning); }
+  .kv-value.is-danger  { color: var(--danger); }
+
+  /* 状态点 */
+  .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .dot.is-success { background: var(--success); }
+  .dot.is-warning { background: var(--warning); }
+  .dot.is-danger  { background: var(--danger); }
+  .dot.is-loading { background: var(--accent); animation: pulse 1.2s infinite; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.35; }
+  }
+}

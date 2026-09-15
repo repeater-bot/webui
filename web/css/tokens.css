@@ -1,0 +1,71 @@
+/*
+ * Repeater 管理控制台 — 设计变量
+ * 所有颜色 / 尺寸 / 间距 / 动效只在此处定义一次
+ */
+
+@layer tokens {
+  :root {
+    /* ---------- 背景层 ---------- */
+    --bg:            #f5f7fa;   /* 页面背景 */
+    --bg-panel:      #ffffff;   /* 顶栏 / 侧栏 / 面板 */
+    --bg-tile:       #ffffff;   /* 磁贴默认 */
+    --bg-tile-hover: #eaf4ff;   /* 磁贴悬浮 */
+    --bg-code:       #f0f4f8;   /* 代码块背景 */
+
+    /* ---------- 边框 ---------- */
+    --border:        #d8e0ea;
+    --border-hover:  #a8cdf5;
+
+    /* ---------- 文字 ---------- */
+    --text:          #1f2d3d;
+    --text-dim:      #6b7a8f;
+    --text-invert:   #ffffff;
+
+    /* ---------- 主色（浅蓝） ---------- */
+    --accent:        #6cb0ff;
+    --accent-hover:  #4a9eff;
+    --accent-light:  #eaf4ff;
+
+    /* ---------- 状态色 ---------- */
+    --success:       #2eaa5c;
+    --warning:       #e8930c;
+    --danger:        #e04b4b;
+    --success-light: #e6f7ec;
+    --warning-light: #fdf3e2;
+    --danger-light:  #fdeaea;
+
+    /* ---------- 磁贴动效 ---------- */
+    --tile-lift:     -2px;
+    --tile-shift:    2px;
+    --shadow-hover:  0 6px 16px rgba(108, 176, 255, 0.18);
+    --shadow-active: 0 2px 6px rgba(108, 176, 255, 0.12);
+    --transition:    0.15s ease;
+
+    /* ---------- 间距 ---------- */
+    --gap-sm:        8px;
+    --gap:           12px;
+    --gap-lg:        20px;
+    --gap-xl:        32px;
+
+    /* ---------- 尺寸 ---------- */
+    --topbar-h:      56px;
+    --sidebar-w:     200px;
+    --tile-min:      180px;
+
+    /* ---------- 字体 ---------- */
+    --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+            "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+    --font-mono: "SF Mono", "Cascadia Code", "Fira Code", Consolas,
+                 "Liberation Mono", Menlo, monospace;
+
+    --fs-xs:   12px;
+    --fs-sm:   13px;
+    --fs-base: 14px;
+    --fs-lg:   16px;
+    --fs-xl:   20px;
+    --fs-2xl:  24px;
+
+    /* ---------- 无圆角 ---------- */
+    --radius: 0;
+  }
+}

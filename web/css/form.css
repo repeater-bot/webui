@@ -1,0 +1,260 @@
+/*
+ * 表单：输入框 / 下拉 / 文本域
+ * 同样无圆角，聚焦时浅蓝描边
+ */
+
+@layer components {
+  .input,
+  .select,
+  .textarea {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text);
+    font-family: inherit;
+    font-size: var(--fs-sm);
+    transition:
+      border-color var(--transition),
+      box-shadow var(--transition);
+  }
+
+  .input:hover,
+  .select:hover,
+  .textarea:hover {
+    border-color: var(--border-hover);
+  }
+
+  .input:focus,
+  .select:focus,
+  .textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108, 176, 255, 0.15);
+    outline: none;
+  }
+
+  .input::placeholder,
+  .textarea::placeholder {
+    color: var(--text-dim);
+    opacity: 0.7;
+  }
+
+  .input:disabled,
+  .select:disabled,
+  .textarea:disabled {
+    background: var(--bg);
+    color: var(--text-dim);
+    cursor: not-allowed;
+  }
+
+  .textarea {
+    min-height: 80px;
+    resize: vertical;
+    font-family: var(--font-mono);
+    line-height: 1.5;
+  }
+
+  .select {
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, transparent 50%, var(--text-dim) 50%),
+      linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+    background-position:
+      calc(100% - 16px) center,
+      calc(100% - 11px) center;
+    background-size: 5px 5px, 5px 5px;
+    background-repeat: no-repeat;
+    padding-right: 32px;
+  }
+
+  /* ---------- 表单行 ---------- */
+  .form-row {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .form-row + .form-row {
+    margin-top: var(--gap);
+  }
+
+  .form-label {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .form-hint {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* ---------- 水平布局的表单行（用于顶栏 / 内联） ---------- */
+  .form-inline {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  .form-inline .input,
+  .form-inline .select {
+    width: auto;
+    flex: 1;
+  }
+
+  /* ---------- 复选框 ---------- */
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    cursor: pointer;
+    font-size: var(--fs-sm);
+    user-select: none;
+  }
+
+  .checkbox-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    border: 1px solid var(--border);
+    border-radius: 0;
+    appearance: none;
+    cursor: pointer;
+    display: grid;
+    place-content: center;
+    transition: all var(--transition);
+  }
+
+  .checkbox-row input[type="checkbox"]:hover {
+    border-color: var(--border-hover);
+  }
+
+  .checkbox-row input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .checkbox-row input[type="checkbox"]:checked::after {
+    content: "";
+    width: 8px;
+    height: 4px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translate(1px, -1px);
+  }
+
+  /* ---------- 按钮组 ---------- */
+  .form-actions {
+    display: flex;
+    gap: var(--gap-sm);
+    margin-top: var(--gap);
+  }
+
+  /* ---------- 参数滑条（设置页） ---------- */
+  .settings-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    padding: var(--gap-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .settings-section-header {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding-bottom: var(--gap-sm);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-section-title {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .settings-param-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .settings-param-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .settings-param-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--gap-sm);
+  }
+
+  .settings-param-label {
+    font-size: var(--fs-sm);
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .settings-param-value {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+
+  .settings-param-desc {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Range 滑条：无圆角，浅蓝 */
+  .settings-param-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    outline: none;
+    cursor: pointer;
+  }
+
+  .settings-param-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 20px;
+    background: var(--accent);
+    border: 1px solid var(--accent-hover);
+    border-radius: 0;
+    cursor: pointer;
+    transition: background var(--transition);
+  }
+
+  .settings-param-slider::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+  }
+
+  .settings-param-slider::-moz-range-thumb {
+    width: 14px;
+    height: 20px;
+    background: var(--accent);
+    border: 1px solid var(--accent-hover);
+    border-radius: 0;
+    cursor: pointer;
+  }
+
+  .settings-param-slider::-moz-range-track {
+    height: 4px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+  }
+}

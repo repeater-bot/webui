@@ -1,0 +1,333 @@
+/*
+ * 页面骨架：顶栏 + 侧栏 + 主区
+ * 顶栏和侧栏固定，主区滚动
+ */
+
+@layer layout {
+  /* ---------- 顶栏 ---------- */
+  .topbar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    padding: 0 var(--gap-lg);
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+  }
+
+  .topbar-title {
+    font-size: var(--fs-lg);
+    font-weight: 600;
+    color: var(--accent-hover);
+    letter-spacing: 0.2px;
+  }
+
+  .topbar-user {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  .topbar-user-label {
+    font-size: var(--fs-sm);
+    color: var(--text-dim);
+  }
+  
+  /* ---------- 顶栏右侧 ---------- */
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-lg);
+  }
+  
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+  
+  .topbar-user {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  /* ---------- 侧栏 ---------- */
+  .sidebar {
+    position: fixed;
+    top: var(--topbar-h);
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: var(--gap);
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+  }
+
+  /* ---------- 主区 ---------- */
+  .main {
+    margin-left: var(--sidebar-w);
+    margin-top: var(--topbar-h);
+    padding: var(--gap-lg);
+    min-height: calc(100vh - var(--topbar-h));
+  }
+
+  /* ---------- 窄屏：侧栏折叠 ---------- */
+  @media (max-width: 760px) {
+    .sidebar {
+      width: 48px;
+      padding: var(--gap-sm) 4px;
+    }
+    .sidebar .tile-item-text {
+      display: none;
+    }
+    .main {
+      margin-left: 48px;
+    }
+  }
+  
+    /* ---------- 顶栏右侧 ---------- */
+  .topbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-lg);
+  }
+
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  .topbar-user {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  /* ---------- 侧栏顶部工具栏 ---------- */
+  .sidebar-add {
+    display: flex;
+    gap: 4px;
+    margin-bottom: var(--gap-sm);
+    padding-bottom: var(--gap-sm);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .sidebar-add-btn {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    background: var(--bg);
+    border: 1px dashed var(--border);
+    cursor: pointer;
+    text-align: center;
+    transition: all var(--transition);
+    font-family: inherit;
+  }
+
+  .sidebar-add-btn:hover {
+    border-color: var(--accent);
+    border-style: solid;
+    color: var(--accent-hover);
+    background: var(--accent-light);
+  }
+
+  .sidebar-reset-btn {
+    flex: 0 0 auto;
+    min-width: 48px;
+  }
+
+  /* ---------- 分组 ---------- */
+  .sidebar-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition);
+    border-left: 3px solid transparent;
+  }
+
+  .sidebar-group-header:hover {
+    background: var(--bg-tile-hover);
+    border-left-color: var(--border-hover);
+    color: var(--text);
+  }
+
+  .sidebar-group-arrow {
+    display: inline-block;
+    width: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-align: center;
+    transition: transform var(--transition);
+  }
+
+  .sidebar-group-title {
+    flex: 1;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-group-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity var(--transition);
+  }
+
+  .sidebar-group-header:hover .sidebar-group-actions {
+    opacity: 1;
+  }
+
+  .sidebar-group-action {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all var(--transition);
+    font-family: inherit;
+  }
+
+  .sidebar-group-action:hover {
+    background: var(--bg-panel);
+    color: var(--accent-hover);
+  }
+
+  /* 组内子项缩进 */
+  .sidebar-group-children {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .sidebar-group-children .tile-item {
+    padding-left: 24px;
+    font-size: var(--fs-xs);
+  }
+
+  .sidebar-group-empty {
+    padding: 4px 10px 4px 24px;
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* ---------- 拖拽状态 ---------- */
+  .tile-item,
+  .sidebar-group-header {
+    -webkit-user-drag: element;
+    user-select: none;
+  }
+
+  .tile-item.is-dragging,
+  .sidebar-group.is-dragging {
+    opacity: 0.4;
+  }
+
+  .sidebar-group-header.is-drop-target {
+    background: var(--accent-light);
+    border-left-color: var(--accent);
+  }
+
+  .sidebar-drop-indicator {
+    height: 2px;
+    background: var(--accent);
+    margin: 1px 0;
+    border-radius: 0;
+    pointer-events: none;
+    animation: drop-indicator-pulse 0.8s ease-in-out infinite alternate;
+  }
+
+  @keyframes drop-indicator-pulse {
+    from { opacity: 0.6; }
+    to   { opacity: 1; }
+  }
+
+    /* ---------- 拖拽浮动层 ---------- */
+  .sidebar-drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.95;
+    box-shadow: 0 8px 24px rgba(31, 45, 61, 0.2);
+    border: 1px solid var(--accent);
+    background: var(--bg-panel);
+    will-change: transform;
+    /* 不设 transition，位置和旋转直接由 JS 指定 */
+  }
+
+  /* 拖拽源本体：占位但不可见 */
+  .tile-item.is-dragging,
+  .sidebar-group.is-dragging > .sidebar-group-header {
+    opacity: 0.3;
+  }
+
+  /* ---------- 插入指示线 ---------- */
+  .sidebar-drop-indicator {
+    height: 2px;
+    background: var(--accent);
+    margin: 2px 0;
+    pointer-events: none;
+    box-shadow: 0 0 4px rgba(108, 176, 255, 0.6);
+    animation: drop-indicator-pulse 0.7s ease-in-out infinite alternate;
+  }
+
+  @keyframes drop-indicator-pulse {
+    from { opacity: 0.7; }
+    to   { opacity: 1; }
+  }
+
+  /* ---------- 放到组内时组头高亮 ---------- */
+  .sidebar-group-header.is-drop-target {
+    background: var(--accent-light);
+    border-left-color: var(--accent);
+    color: var(--accent-hover);
+  }
+
+  /* ---------- 组内子项缩进（按你的要求） ---------- */
+  .sidebar-group-children {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-left: 10px;
+    border-left: 2px solid var(--border);
+  }
+
+  .sidebar-group-children .tile-item {
+    padding-left: 12px;
+    font-size: var(--fs-xs);
+    margin-left: 0;
+  }
+}

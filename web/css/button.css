@@ -1,0 +1,84 @@
+/*
+ * 按钮：默认走磁贴语言，与 .tile 视觉一致
+ * 变体只改配色，不改形态
+ */
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: var(--bg-tile);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--text);
+    font-size: var(--fs-sm);
+    font-family: inherit;
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    transition:
+      background var(--transition),
+      border-color var(--transition),
+      box-shadow var(--transition),
+      transform var(--transition);
+  }
+
+  .btn:hover {
+    background: var(--bg-tile-hover);
+    border-color: var(--border-hover);
+    box-shadow: var(--shadow-hover);
+    transform: translateY(-1px);
+  }
+
+  .btn:active {
+    transform: translateY(0);
+    box-shadow: var(--shadow-active);
+  }
+
+  .btn:disabled,
+  .btn.is-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  /* ---------- 尺寸 ---------- */
+  .btn-sm { padding: 5px 10px; font-size: var(--fs-xs); }
+  .btn-lg { padding: 10px 22px; font-size: var(--fs-base); }
+
+  /* ---------- 变体 ---------- */
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--text-invert);
+  }
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
+  .btn-danger {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: var(--text-invert);
+  }
+  .btn-danger:hover {
+    background: #c93a3a;
+    border-color: #c93a3a;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-dim);
+  }
+  .btn-ghost:hover {
+    background: var(--bg-tile-hover);
+    border-color: var(--border-hover);
+    color: var(--text);
+  }
+}

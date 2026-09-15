@@ -1,0 +1,208 @@
+@layer page {
+
+  .main.request-log-main {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--topbar-h));
+    padding: var(--gap-lg);
+    gap: var(--gap);
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  /* 工具栏 */
+  .rl-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: var(--gap-sm) var(--gap);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .rl-toolbar .rl-spacer { flex: 1; }
+
+  .rl-status {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  /* 进度条 */
+  .rl-progress {
+    flex-shrink: 0;
+    height: 3px;
+    background: var(--bg-code);
+    overflow: hidden;
+  }
+
+  .rl-progress-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 0;
+    transition: width 0.2s linear;
+  }
+
+  /* 汇总磁贴 */
+  .rl-summary {
+    flex-shrink: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: var(--gap-sm);
+  }
+
+  .rl-stat {
+    padding: var(--gap);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+  }
+
+  .rl-stat-label {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  .rl-stat-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    font-family: var(--font-mono);
+    line-height: 1.2;
+  }
+
+  .rl-stat-sub {
+    font-size: var(--fs-xs);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    margin-top: 2px;
+  }
+
+  /* 图表区 */
+  .rl-chart-panel {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .rl-chart-header {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: var(--gap-sm) var(--gap);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .rl-dim-tab {
+    padding: 5px 14px;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+
+  .rl-dim-tab:hover {
+    border-color: var(--border-hover);
+    color: var(--text);
+  }
+
+  .rl-dim-tab.active {
+    background: var(--accent-light);
+    border-color: var(--accent);
+    color: var(--accent-hover);
+    font-weight: 600;
+  }
+
+  .rl-chart-body {
+    flex: 1;
+    min-height: 0;
+    position: relative;
+    padding: var(--gap);
+  }
+
+  .rl-chart-body canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .rl-chart-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-dim);
+    font-size: var(--fs-sm);
+    pointer-events: none;
+  }
+
+  /* 底部分布区 */
+  .rl-distribution {
+    flex-shrink: 0;
+    max-height: 240px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: var(--gap);
+  }
+
+  .rl-dist-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .rl-dist-header {
+    flex-shrink: 0;
+    padding: 6px var(--gap);
+    border-bottom: 1px solid var(--border);
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rl-dist-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: var(--gap-sm) var(--gap);
+  }
+
+  .rl-dist-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: var(--gap-sm);
+    padding: 2px 0;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+  }
+
+  .rl-dist-key {
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rl-dist-val {
+    color: var(--text-dim);
+    text-align: right;
+  }
+}
