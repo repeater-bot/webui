@@ -113,6 +113,21 @@
     display: block;
     padding: 0;
   }
+  
+  /* ---------- 自适应高度的编辑器 ---------- */
+  .tool-editor-autoresize {
+    flex: none;              /* 取消 flex: 1 撑满 */
+    min-height: 200px;       /* 至少这么高 */
+    height: auto;            /* 由 JS 动态设置 */
+    max-height: none;        /* 不限制最大高度，让内容撑 */
+    overflow: hidden;        /* 不出现内部滚动条，因为整个父容器会滚 */
+  }
+
+  /* 包裹自适应编辑器的父容器：改为纵向滚动 */
+  .tool-panel-body.flex-body:has(.tool-editor-autoresize) {
+    display: block;
+    overflow-y: auto;
+  }
 
   .tool-editor:focus { outline: none; }
 
