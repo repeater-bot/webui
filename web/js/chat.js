@@ -2,8 +2,9 @@
  * Chat 页面
  * - 流式对话（NDJSON）
  * - reasoning 折叠 / content markdown / tool_calls 时间线
- * - Core Task Status 轮询
- * - Buffer 查看
+ * - Core Task Status 轮询（1s）
+ * - Buffer 轮询（1.5s）
+ * - 中断（abort + break API）
  */
 
 (function () {
@@ -11,13 +12,17 @@
 
   const { div, span, button, input } = RPT.dom
 
+  /* ============================================================
+   * 状态
+   * ============================================================ */
+
   const state = {
     userId: '',
     modelId: '',
-    thinking: null,        // null / true / false
+    thinking: null,            // null / true / false
     stream: true,
-    messages: [],          // { role, content, reasoning, toolCalls, streaming }
-    current: null,         // 正在接收的 assistant 消息
+    messages: [],              // { role, roleName, content, reasoning, toolCalls, streaming }
+    current: null,
     abortController: null,
     taskId: null,
     isGenerating: false,
@@ -27,16 +32,18 @@
 
   const uid = () => RPT.storage.get(RPT.storage.keys.CURRENT_USER_ID, '')
 
-  /* ---------- 工具：Markdown 渲染 ---------- */
+  /* ============================================================
+   * 工具
+   * ============================================================ */
+
   function renderMarkdown(text) {
-    if (!text) return ''
+    if (!text) return null
     if (window.marked && typeof window.marked.parse === 'function') {
       try { return window.marked.parse(text) } catch { /* fall through */ }
     }
-    return null  // 表示降级到纯文本
+    return null
   }
 
-  /* ---------- 工具：UUID ---------- */
   function newTaskId() {
     if (crypto.randomUUID) return crypto.randomUUID()
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
@@ -44,6 +51,12 @@
       const v = c === 'x' ? r : (r & 0x3) | 0x8
       return v.toString(16)
     })
+  }
+
+  function stringifyContent(content) {
+    if (typeof content === 'string') return content
+    if (content == null) return ''
+    try { return JSON.stringify(content, null, 2) } catch { return String(content) }
   }
 
   /* ============================================================
@@ -112,10 +125,6 @@
     return msg
   }
 
-  /* ============================================================
-   * 主渲染
-   * ============================================================ */
-
   function renderMessages(container) {
     container.innerHTML = ''
     if (state.messages.length === 0) {
@@ -126,15 +135,6 @@
       container.appendChild(renderMessage(unit))
     }
     container.scrollTop = container.scrollHeight
-  }
-
-  function renderStatusPanel(body) {
-    body.innerHTML = ''
-    if (!state.isGenerating) {
-      body.appendChild(div({ class: 'empty' }, ['当前没有正在执行的任务']))
-      return
-    }
-    body.appendChild(div({}, ['加载中...']))
   }
 
   /* ============================================================
@@ -183,7 +183,16 @@
 
   async function sendMessage(text, inputEl, sendBtn, messagesEl) {
     if (!text.trim()) return
-    if (state.isGenerating) { RPT.notify.toast('请先等待当前生成完成', 'warning'); return }
+    if (state.isGenerating) {
+      RPT.notify.toast('请先等待当前生成完成', 'warning')
+      return
+    }
+
+    const user = uid()
+    if (!user) {
+      RPT.notify.toast('请先在顶栏设置 user_id', 'warning')
+      return
+    }
 
     const userMsg = { role: 'user', content: text }
     state.messages.push(userMsg)
@@ -218,11 +227,11 @@
 
     try {
       if (state.stream) {
-        for await (const chunk of RPT.apiChat.stream(uid(), body, state.abortController.signal)) {
+        for await (const chunk of RPT.apiChat.stream(user, body, state.abortController.signal)) {
           handleChunk(chunk, assistant, messagesEl)
         }
       } else {
-        const res = await RPT.apiChat.complete(uid(), body)
+        const res = await RPT.apiChat.complete(user, body)
         handleNonStreamResponse(res, assistant, messagesEl)
       }
     } catch (e) {
@@ -243,28 +252,31 @@
     }
   }
 
-  /* ---------- 处理单个 chunk ---------- */
   function handleChunk(chunk, assistant, messagesEl) {
-    // ContentUnit（tool 响应）：有 role 字段
-    if (chunk && typeof chunk === 'object' && chunk.role && chunk.content !== undefined) {
+    if (!chunk || typeof chunk !== 'object') return
+
+    /* ContentUnit（Tool 响应）：有 role 且没有 finish_reason */
+    if (chunk.role && !chunk.id && !chunk.created) {
       state.messages.push({
         role: chunk.role,
         roleName: chunk.role_name,
-        content: typeof chunk.content === 'string' ? chunk.content : JSON.stringify(chunk.content),
+        content: stringifyContent(chunk.content),
+        reasoning: chunk.reasoning_content || '',
+        toolCalls: chunk.tool_calls || [],
       })
       renderMessages(messagesEl)
       return
     }
 
-    // Delta
+    /* Delta */
     if (chunk.reasoning_content) assistant.reasoning += chunk.reasoning_content
     if (chunk.content) assistant.content += chunk.content
 
     if (chunk.tool_calls && Array.isArray(chunk.tool_calls)) {
       for (const tc of chunk.tool_calls) {
         let existing = assistant.toolCalls[assistant.toolCalls.length - 1]
-        if (!existing || existing.id !== tc.id) {
-          existing = { id: tc.id, name: tc.name || '', arguments: '' }
+        if (!existing || (tc.id && existing.id !== tc.id)) {
+          existing = { id: tc.id || '', name: tc.name || '', arguments: '' }
           assistant.toolCalls.push(existing)
         }
         if (tc.name) existing.name = tc.name
@@ -275,28 +287,25 @@
     renderMessages(messagesEl)
   }
 
-  /* ---------- 非流式响应 ---------- */
   function handleNonStreamResponse(res, assistant, messagesEl) {
     if (res && res.context && Array.isArray(res.context.context_list)) {
-      // 把新生成的上下文都追加
       for (const unit of res.context.context_list) {
         state.messages.push({
           role: unit.role,
           roleName: unit.role_name,
-          content: typeof unit.content === 'string' ? unit.content : JSON.stringify(unit.content),
+          content: stringifyContent(unit.content),
           reasoning: unit.reasoning_content || '',
           toolCalls: unit.tool_calls || [],
         })
       }
-    } else if (res && res.user_input !== undefined) {
-      // 兼容其他响应格式
-      assistant.content = typeof res.user_input === 'string' ? res.user_input : ''
+    } else {
+      assistant.content = stringifyContent(res && res.user_input)
     }
     renderMessages(messagesEl)
   }
 
   /* ============================================================
-   * 状态轮询
+   * 任务状态轮询
    * ============================================================ */
 
   function startStatusPolling() {
@@ -306,9 +315,7 @@
       try {
         const data = await RPT.apiStatus.coreTasks(uid())
         renderTaskStatus(data)
-      } catch (e) {
-        // 静默失败
-      }
+      } catch { /* 静默 */ }
     }
     tick()
     state.statusTimer = setInterval(tick, 1000)
@@ -355,9 +362,7 @@
       try {
         const data = await RPT.apiChat.buffer(uid())
         renderBuffer(data)
-      } catch (e) {
-        // 404 或用户无 buffer 时静默
-      }
+      } catch { /* 静默 */ }
     }
     tick()
     state.bufferTimer = setInterval(tick, 1500)
@@ -400,9 +405,7 @@
       return
     }
     try {
-      if (state.abortController) {
-        state.abortController.abort()
-      }
+      if (state.abortController) state.abortController.abort()
       if (state.taskId) {
         await RPT.apiChat.breakOne(uid(), state.taskId)
       } else {
@@ -419,15 +422,13 @@
    * ============================================================ */
 
   function render() {
-    state.userId = uid()
-
-    // 移除可能存在的旧 main（但不要动 topbar / sidebar）
+    /* 只清掉主区，保留顶栏和侧栏 */
     document.querySelectorAll('.main').forEach((n) => n.remove())
 
-    const main = div({ class: 'main chat-main' })
+    state.userId = uid()
 
-    // 左侧聊天区
     const messagesEl = div({ class: 'chat-messages' })
+
     const inputEl = RPT.dom.el('textarea', {
       class: 'textarea chat-input',
       placeholder: '输入消息，Enter 发送，Shift+Enter 换行',
@@ -438,9 +439,11 @@
         }
       },
     })
-    const sendBtn = button({ class: 'btn btn-primary', onClick: () => {
-      sendMessage(inputEl.value, inputEl, sendBtn, messagesEl)
-    } }, ['发送'])
+
+    const sendBtn = button({
+      class: 'btn btn-primary',
+      onClick: () => sendMessage(inputEl.value, inputEl, sendBtn, messagesEl),
+    }, ['发送'])
 
     const chatArea = div({ class: 'chat-area' }, [
       buildParams(),
@@ -454,33 +457,45 @@
       ]),
     ])
 
-    // 右侧状态面板
-    const taskStatusBody = div({ class: 'chat-status-panel-body', dataset: { panel: 'task-status' } }, [
-      div({ class: 'empty' }, ['当前没有正在执行的任务']),
-    ])
-    const bufferBody = div({ class: 'chat-status-panel-body', dataset: { panel: 'buffer' } }, [
-      div({ class: 'empty' }, ['无缓冲']),
-    ])
+    /* 右侧面板 */
+    const taskStatusBody = div({
+      class: 'chat-status-panel-body',
+      dataset: { panel: 'task-status' },
+    }, [div({ class: 'empty' }, ['当前没有正在执行的任务'])])
+
+    const bufferBody = div({
+      class: 'chat-status-panel-body',
+      dataset: { panel: 'buffer' },
+    }, [div({ class: 'empty' }, ['无缓冲'])])
 
     const statusPanel = div({ class: 'chat-status' }, [
       div({ class: 'chat-status-panel flex-1' }, [
         div({ class: 'chat-status-panel-head' }, [
           span({}, ['任务状态']),
-          button({ class: 'btn btn-sm btn-ghost', onClick: () => RPT.apiStatus.coreTasks(uid()).then(renderTaskStatus).catch(() => {}) }, ['刷新']),
+          button({
+            class: 'btn btn-sm btn-ghost',
+            onClick: () => RPT.apiStatus.coreTasks(uid())
+              .then(renderTaskStatus)
+              .catch(() => {}),
+          }, ['刷新']),
         ]),
         taskStatusBody,
       ]),
       div({ class: 'chat-status-panel flex-1' }, [
         div({ class: 'chat-status-panel-head' }, [
           span({}, ['生成缓冲']),
-          button({ class: 'btn btn-sm btn-ghost', onClick: () => RPT.apiChat.buffer(uid()).then(renderBuffer).catch(() => {}) }, ['刷新']),
+          button({
+            class: 'btn btn-sm btn-ghost',
+            onClick: () => RPT.apiChat.buffer(uid())
+              .then(renderBuffer)
+              .catch(() => {}),
+          }, ['刷新']),
         ]),
         bufferBody,
       ]),
     ])
 
-    main.appendChild(chatArea)
-    main.appendChild(statusPanel)
+    const main = div({ class: 'main chat-main' }, [chatArea, statusPanel])
     document.body.appendChild(main)
 
     if (!state.userId) {
