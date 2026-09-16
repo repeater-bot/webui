@@ -76,5 +76,17 @@
     while (node.firstChild) node.removeChild(node.firstChild)
   }
 
-  RPT.dom = { el, div, span, a, button, input, label, qs, qsa, on, clear }
+  // 追加到 RPT.dom 的导出里
+  function autoResize(textarea) {
+    const resize = () => {
+      textarea.style.height = 'auto'
+      textarea.style.height = textarea.scrollHeight + 'px'
+    }
+    textarea.addEventListener('input', resize)
+    requestAnimationFrame(resize)
+    window.addEventListener('resize', resize)
+    return resize
+  }
+
+  RPT.dom = { el, div, span, a, button, input, label, qs, qsa, on, clear, autoResize }
 })()
