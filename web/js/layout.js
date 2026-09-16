@@ -20,8 +20,8 @@
   const SIDEBAR_ITEMS = {
     'index':        { label: '主页',     path: '/web/index.html' },
     'user-space':   { label: '用户空间', path: '/web/user-space.html' },
-    'chat':         { label: 'Chat',     path: '/web/generate/chat.html' },
-    'image':        { label: 'Image',    path: '/web/generate/image.html' },
+    'chat':         { label: '聊天',     path: '/web/generate/chat.html' },
+    'image':        { label: '图片生成',  path: '/web/generate/image.html' },
     'similarity':   { label: '相似度',   path: '/web/generate/similarity.html' },
     'models':       { label: '模型',     path: '/web/models.html' },
     'alived-users': { label: '活跃用户', path: '/web/alived-users.html' },
