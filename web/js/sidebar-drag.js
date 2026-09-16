@@ -1,24 +1,51 @@
 /*
- * 侧栏拖拽（手写 Pointer Events 版）
- * - 阈值启动，短按不触发拖拽（保留 click）
- * - ghost 由 transform 控制位置与旋转
- * - 旋转与瞬时速度相关，有滞后感
+ * 侧栏拖拽
+ * - 手写 Pointer Events（不依赖 HTML5 drag）
+ * - 阈值启动：移动超过 N px 才启动，保留 click
+ * - ghost 位置 + 旋转均带 lerp 平滑
+ * - 位置与旋转合并到单一 rAF，无脏数据时停
+ * - 插入点计算节流到 50ms
  */
 
 (function () {
   'use strict'
 
+  /* ============================================================
+   * 常量
+   * ============================================================ */
+
+  const DROP_TARGET_INTERVAL     = 50      // 插入点计算间隔（ms）
+  const SIZE_REFERENCE           = 40      // 参考尺寸（px）
+  const SIZE_FACTOR_MIN          = 0.3
+  const SIZE_FACTOR_MAX          = 2
+  const ROTATE_CONVERGE_EPSILON  = 0.05    // 旋转收敛阈值（度）
+  const POSITION_CONVERGE_EPSILON = 0.3    // 位置收敛阈值（px）
+
+  /* 位置平滑系数（每帧靠拢目标的比例），越小越"黏" */
+  const POSITION_LERP_DEFAULT    = 0.35
+
+  /* ============================================================
+   * 状态
+   * ============================================================ */
+
   let ctx = null
   let draggingJustEnded = false
+  let lastDropTargetTime = 0
+  let isRendering = false
 
-  /* 旋转动画状态 */
   const rotateState = {
     current: 0,
     target: 0,
     velocity: 0,
     lastX: 0,
     lastTime: 0,
-    rafId: null,
+  }
+
+  const positionState = {
+    currentX: 0,
+    currentY: 0,
+    targetX: 0,
+    targetY: 0,
   }
 
   /* ============================================================
@@ -53,7 +80,7 @@
   }
 
   /* ============================================================
-   * Pointer 事件绑定
+   * 绑定
    * ============================================================ */
 
   function bind(sidebarEl, onDrop) {
@@ -62,18 +89,20 @@
       const source = identifyDragSource(e.target, sidebarEl)
       if (!source) return
 
-      const params = RPT.dragConfig.get('sidebar')       // ← 读一次
+      const params = RPT.dragConfig.get('sidebar')
 
       ctx = {
         source,
         sidebarEl,
         onDrop,
-        params,                                         // ← 存入上下文
+        params,
         startX: e.clientX,
         startY: e.clientY,
         active: false,
         ghostData: null,
         currentTarget: null,
+        sizeFactor: 1,
+        positionLerp: params.positionLerp != null ? params.positionLerp : POSITION_LERP_DEFAULT,
       }
 
       document.addEventListener('pointermove', onPointerMove)
@@ -94,9 +123,6 @@
    * 指针移动
    * ============================================================ */
 
-  let lastDropTargetTime = 0
-  const DROP_TARGET_INTERVAL = 50   // ms
-
   function onPointerMove(e) {
     if (!ctx) return
 
@@ -109,12 +135,11 @@
       startDragging(e)
     }
 
-    /* 1. 位置：立即，但通过 rAF 合并 */
-    ctx.pendingX = e.clientX
-    ctx.pendingY = e.clientY
-    scheduleGhostUpdate()
+    /* 1. 位置目标 */
+    positionState.targetX = e.clientX - ctx.ghostData.offsetX
+    positionState.targetY = e.clientY - ctx.ghostData.offsetY
 
-    /* 2. 速度 → 旋转（不变） */
+    /* 2. 速度 → 旋转目标 */
     const now = performance.now()
     const dt = now - rotateState.lastTime
     if (dt > 0 && dt < 100) {
@@ -134,7 +159,10 @@
       )
     )
 
-    /* 3. 插入点：节流 */
+    /* 3. 调度 rAF */
+    scheduleRender()
+
+    /* 4. 插入点：节流 */
     if (now - lastDropTargetTime >= DROP_TARGET_INTERVAL) {
       lastDropTargetTime = now
       const target = findDropTarget(e.clientX, e.clientY)
@@ -151,6 +179,7 @@
     ctx.active = true
     ctx.source.visualEl.classList.add('is-dragging')
 
+    /* 组：只克隆组头；item：克隆自身 */
     const ghostSource = ctx.source.kind === 'group'
       ? ctx.source.visualEl.querySelector('.sidebar-group-header')
       : ctx.source.visualEl
@@ -161,34 +190,39 @@
     ghostData.offsetY = ctx.startY - rect.top
 
     ctx.ghostData = ghostData
-    ctx.pendingX = e.clientX
-    ctx.pendingY = e.clientY
 
-    /* 尺寸因子 */
+    /* 尺寸因子：几何平均尺寸越小，转得越明显 */
     const S = Math.sqrt(rect.width * rect.height)
-    ctx.sizeFactor = Math.min(2, Math.max(0.3, 40 / Math.max(24, S)))
+    const raw = SIZE_REFERENCE / Math.max(24, S)
+    ctx.sizeFactor = Math.min(SIZE_FACTOR_MAX, Math.max(SIZE_FACTOR_MIN, raw))
 
-    updateGhostPosition(e.clientX, e.clientY)
+    /* 初始化位置：当前 = 目标 = ghost 起点 */
+    positionState.currentX = rect.left
+    positionState.currentY = rect.top
+    positionState.targetX  = rect.left
+    positionState.targetY  = rect.top
 
+    /* 应用初始位置 */
+    applyGhostTransformNow()
+
+    /* 初始化旋转 */
     rotateState.current  = 0
     rotateState.target   = 0
     rotateState.velocity = 0
     rotateState.lastX    = e.clientX
     rotateState.lastTime = performance.now()
 
-    if (!rotateState.rafId) {
-      rotateState.rafId = requestAnimationFrame(rotateLoop)
-    }
+    scheduleRender()
   }
 
-  function createGhost(visualEl) {
-    const rect = visualEl.getBoundingClientRect()
-    const ghost = visualEl.cloneNode(true)
+  function createGhost(sourceEl, rect) {
+    const ghost = sourceEl.cloneNode(true)
     ghost.classList.add('sidebar-drag-ghost')
     ghost.classList.remove('is-dragging')
     ghost.style.left = '0'
     ghost.style.top = '0'
     ghost.style.width = rect.width + 'px'
+    ghost.style.height = rect.height + 'px'
 
     document.body.appendChild(ghost)
 
@@ -196,63 +230,52 @@
       el: ghost,
       offsetX: 0,
       offsetY: 0,
-      gx: rect.left,
-      gy: rect.top,
     }
   }
 
   /* ============================================================
-   * Ghost 位置 + 旋转
+   * rAF 渲染循环
    * ============================================================ */
 
-  let ghostRafId = null
-
-  function scheduleGhostUpdate() {
-    if (ghostRafId) return
-    ghostRafId = requestAnimationFrame(() => {
-      ghostRafId = null
-      if (!ctx || !ctx.ghostData) return
-      updateGhostPosition(ctx.pendingX, ctx.pendingY)
-    })
-  }
-
-  function updateGhostPosition(x, y) {
-    if (!ctx || !ctx.ghostData) return
-    ctx.ghostData.gx = x - ctx.ghostData.offsetX
-    ctx.ghostData.gy = y - ctx.ghostData.offsetY
-    applyGhostTransform()
-  }
-
-  function applyGhostTransform() {
-    if (!ctx || !ctx.ghostData) return
-    const { gx, gy } = ctx.ghostData
-    ctx.ghostData.el.style.transform =
-      `translate(${gx}px, ${gy}px) rotate(${rotateState.current.toFixed(2)}deg)`
-  }
-
-  let renderRafId = null
-
   function scheduleRender() {
-    if (renderRafId) return
-    renderRafId = requestAnimationFrame(renderLoop)
+    if (isRendering) return
+    isRendering = true
+    requestAnimationFrame(renderFrame)
   }
 
-  function renderLoop() {
-    renderRafId = null
+  function renderFrame() {
+    isRendering = false
     if (!ctx) return
 
-    /* 1. 平滑旋转角度 */
-    rotateState.current += (rotateState.target - rotateState.current) * ctx.params.rotateLerp
+    /* 旋转 lerp */
+    rotateState.current +=
+      (rotateState.target - rotateState.current) * ctx.params.rotateLerp
 
-    /* 2. 应用位置 + 旋转 */
-    if (ctx.ghostData && ctx.pendingX != null) {
-      ctx.ghostData.gx = ctx.pendingX - ctx.ghostData.offsetX
-      ctx.ghostData.gy = ctx.pendingY - ctx.ghostData.offsetY
-      applyGhostTransform()
+    /* 位置 lerp */
+    const posLerp = ctx.positionLerp
+    positionState.currentX += (positionState.targetX - positionState.currentX) * posLerp
+    positionState.currentY += (positionState.targetY - positionState.currentY) * posLerp
+
+    applyGhostTransformNow()
+
+    /* 旋转或位置尚未收敛 → 继续下一帧 */
+    const rotateStillMoving =
+      Math.abs(rotateState.target - rotateState.current) > ROTATE_CONVERGE_EPSILON
+    const posStillMoving =
+      Math.abs(positionState.targetX - positionState.currentX) > POSITION_CONVERGE_EPSILON ||
+      Math.abs(positionState.targetY - positionState.currentY) > POSITION_CONVERGE_EPSILON
+
+    if (rotateStillMoving || posStillMoving) {
+      scheduleRender()
     }
+  }
 
-    /* 3. 一直跑，保持旋转平滑 */
-    scheduleRender()
+  function applyGhostTransformNow() {
+    if (!ctx || !ctx.ghostData) return
+    const g = ctx.ghostData
+    g.el.style.transformOrigin = `${g.offsetX}px ${g.offsetY}px`
+    g.el.style.transform =
+      `translate(${positionState.currentX}px, ${positionState.currentY}px) rotate(${rotateState.current.toFixed(2)}deg)`
   }
 
   /* ============================================================
@@ -275,24 +298,18 @@
       }
     }
 
-    if (rotateState.rafId) {
-      cancelAnimationFrame(rotateState.rafId)
-      rotateState.rafId = null
-    }
-    if (ghostRafId) {
-      cancelAnimationFrame(ghostRafId)
-      ghostRafId = null
-    }
     if (ctx.ghostData && ctx.ghostData.el) {
       ctx.ghostData.el.remove()
     }
     if (ctx.source && ctx.source.visualEl) {
       ctx.source.visualEl.classList.remove('is-dragging')
     }
+
     hideIndicator()
     clearDropHighlights()
 
     ctx = null
+    isRendering = false
   }
 
   /* ============================================================
