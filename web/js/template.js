@@ -117,6 +117,20 @@
     }
   }
 
+  /* textarea 高度自适应内容 */
+  function enableAutoResize(textarea) {
+    const resize = () => {
+      textarea.style.height = 'auto'
+      textarea.style.height = textarea.scrollHeight + 'px'
+    }
+    textarea.addEventListener('input', resize)
+    /* 初始跑一次 */
+    requestAnimationFrame(resize)
+    /* 窗口尺寸变化时也重算 */
+    window.addEventListener('resize', resize)
+    return resize
+  }
+
   /* ============================================================
    * 变量表抽屉
    * ============================================================ */
@@ -232,11 +246,12 @@
 
     /* 编辑器 */
     const editor = RPT.dom.el('textarea', {
-      class: 'textarea tool-editor',
+      class: 'textarea tool-editor tool-editor-autoresize',
       placeholder: '输入 Jinja2 模板...',
       dataset: { editor: 'template' },
       onInput: (e) => { state.text = e.target.value },
     }, [state.text])
+    enableAutoResize(editor)
 
     const editorPanel = div({ class: 'tool-panel' }, [
       div({ class: 'tool-panel-header' }, [span({}, ['模板'])]),
