@@ -293,7 +293,17 @@
 
     const detailNode = div({ class: 'models-detail' }, [
       div({ class: 'models-detail-section' }, [
-        div({ class: 'models-detail-section-title' }, ['model_info']),
+        div({ class: 'models-detail-section-title' }, [
+          'model_info',
+          model.parent_id
+            ? button({
+                class: 'btn btn-sm',
+                style: { marginLeft: '8px' },
+                title: `刷新供应商 ${model.parent_id} 的模型池`,
+                onClick: (e) => { e.stopPropagation(); refreshPool(model.parent_id) },
+              }, ['刷新该供应商'])
+            : null,
+        ]),
         div({ class: 'models-detail-grid' }, baseKVs),
       ]),
       ...detailSections,
@@ -311,6 +321,36 @@
     ])
 
     return detailNode
+  }
+
+  /* ============================================================
+   * 刷新模型池
+   * ============================================================ */
+
+  /*
+   * providerId 为空 → 刷新全部；否则只刷该供应商
+   * providerId 用 model.parent_id（供应商 id），不是 model.parent（显示名）
+   */
+  async function refreshPool(providerId) {
+    const label = providerId ? `供应商 ${providerId}` : '全部模型池'
+    try {
+      await RPT.apiModels.refresh(providerId)
+      RPT.notify.toast(`已刷新${label}`, 'success', 3000)
+      await loadModels()
+    } catch (e) {
+      RPT.notify.error(e)
+    }
+  }
+
+  /* 顶栏：全局刷新 */
+  function buildTopbarActions() {
+    return [
+      button({
+        class: 'btn btn-sm',
+        title: '刷新服务器的模型池（全部供应商）',
+        onClick: () => refreshPool(null),
+      }, ['刷新模型池']),
+    ]
   }
 
   /* ============================================================
@@ -426,7 +466,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', () => {
-    RPT.layout.mount('/web/models.html')
+    RPT.layout.mount('/web/models.html', { actions: buildTopbarActions() })
     render()
   })
 })()
