@@ -323,74 +323,17 @@
 
   /* ---------- 拖拽数据操作 ---------- */
 
-  function detachNode(drag) {
-    if (drag.kind === 'item') {
-      if (drag.fromGroupId) {
-        const group = layout.items.find((n) => n.type === 'group' && n.id === drag.fromGroupId)
-        if (!group) return null
-        const idx = group.children.findIndex((c) => c.id === drag.itemId)
-        if (idx < 0) return null
-        const [node] = group.children.splice(idx, 1)
-        return node
-      } else {
-        const idx = layout.items.findIndex((n) => n.type === 'item' && n.id === drag.itemId)
-        if (idx < 0) return null
-        const [node] = layout.items.splice(idx, 1)
-        return node
-      }
-    }
-    if (drag.kind === 'group') {
-      const idx = layout.items.findIndex((n) => n.type === 'group' && n.id === drag.groupId)
-      if (idx < 0) return null
-      const [node] = layout.items.splice(idx, 1)
-      return node
-    }
-    return null
-  }
-
-  function insertNode(node, target) {
-    if (target.position === 'inside-group') {
-      if (node.type === 'group') return false
-      const group = layout.items.find((n) => n.type === 'group' && n.id === target.groupId)
-      if (!group) return false
-      group.children.push(node)
-      return true
-    }
-
-    if (target.position === 'before' || target.position === 'after') {
-      if (target.scope === 'child') {
-        if (node.type === 'group') return false
-        const group = layout.items.find((n) => n.type === 'group' && n.id === target.groupId)
-        if (!group) return false
-        const idx = group.children.findIndex((c) => c.id === target.itemId)
-        if (idx < 0) return false
-        group.children.splice(target.position === 'before' ? idx : idx + 1, 0, node)
-        return true
-      } else {
-        const idx = layout.items.findIndex((n) => n.type === 'item' && n.id === target.itemId)
-        if (idx < 0) return false
-        layout.items.splice(target.position === 'before' ? idx : idx + 1, 0, node)
-        return true
-      }
-    }
-
-    if (target.position === 'append-root') {
-      layout.items.push(node)
-      return true
-    }
-
-    return false
-  }
-
   function handleDrop(drag, target) {
-    const node = detachNode(drag)
+    // 快照原始布局，插入失败时用它整体回滚
+    const backup = JSON.parse(JSON.stringify(layout.items))
+
+    const node = RPT.sidebarLayout.detachNode(layout, drag)
     if (!node) return
 
-    const ok = insertNode(node, target)
-    if (!ok) {
-      // 放不进 → 尝试放回原处（简单兜底：放回末尾）
+    if (!RPT.sidebarLayout.insertNode(layout, node, target)) {
+      // 放不进 → 整体还原，避免节点被摘除后丢失
+      layout.items = backup
       RPT.notify.toast('无法放到该位置', 'warning')
-      // 直接重渲染，不用真的恢复（因为 layout 已经改了）
     }
 
     persist()
