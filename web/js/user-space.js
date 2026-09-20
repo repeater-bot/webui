@@ -15,12 +15,14 @@
     { id: 'context', label: 'Context', src: '/web/user-space/context.html' },
     { id: 'prompt',  label: 'Prompt',  src: '/web/user-space/prompt.html'  },
     { id: 'config',  label: 'Config',  src: '/web/user-space/config.html'  },
+    { id: 'program', label: 'Program', src: '/web/user-space/program.html' },
   ]
 
   const DATA_TYPES = [
     { id: 'context', label: 'Context' },
     { id: 'prompt',  label: 'Prompt'  },
     { id: 'config',  label: 'Config'  },
+    { id: 'program', label: 'Program' },
   ]
 
   function currentUserId() {
