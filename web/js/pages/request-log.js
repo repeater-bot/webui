@@ -222,7 +222,7 @@
     const chart = ensureChart()
     if (!chart) {
       const empty = document.querySelector('[data-panel="rl-chart-empty"]')
-      if (empty) empty.textContent = 'Chart.js 未加载（请下载 chart.umd.min.js 到 /web/vendor/）'
+      if (empty) empty.textContent = 'Chart.js 未加载（请将 chart.min.js 放到 /web/vendor/）'
       return
     }
 
