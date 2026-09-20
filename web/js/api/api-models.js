@@ -9,5 +9,17 @@
     list:       (detailed = false) => RPT.api.get(`/models?detailed_info=${detailed}`),
     get:        (modelId, detailed = false) => RPT.api.get(`/models/${encodeURIComponent(modelId)}?detailed_info=${detailed}`),
     ping:       (uid, body) => RPT.api.post(`/ping_provider/${uid}`, body),
+
+    /*
+     * 刷新模型池
+     * - 不传 providerId：刷新全部供应商
+     * - 传 providerId：只刷新该供应商
+     * provider_id 对应模型数据里的 parent_id（不是 parent，parent 是显示名）
+     */
+    refresh: (providerId) => RPT.api.get(
+      providerId
+        ? `/model_refresh/${encodeURIComponent(providerId)}`
+        : '/model_refresh'
+    ),
   }
 })()
