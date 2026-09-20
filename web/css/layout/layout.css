@@ -285,7 +285,8 @@
     border: 1px solid var(--accent);
     background: var(--bg-panel);
     will-change: transform;
-    /* 不设 transition，位置和旋转直接由 JS 指定 */
+    /* 位置与旋转由 JS 逐帧内联写入；transition 也在 JS 里内联置为 none，
+       因为 .tile-item 的 transform 过渡在 @layer components，优先级高于本层 */
   }
 
   /* 拖拽源本体：占位但不可见 */

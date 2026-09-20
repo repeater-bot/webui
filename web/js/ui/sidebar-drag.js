@@ -224,6 +224,14 @@
     ghost.style.width = rect.width + 'px'
     ghost.style.height = rect.height + 'px'
 
+    /*
+     * 位置与旋转逐帧由 JS 写入，必须禁掉 CSS 过渡。
+     * 否则 .tile-item 自带的 transform 过渡（@layer components）会与
+     * 下文的 lerp 叠加，使 item ghost 比 group ghost 跟随更迟滞。
+     * 内联声明可无视 cascade layer，保证两类 ghost 行为一致。
+     */
+    ghost.style.transition = 'none'
+
     document.body.appendChild(ghost)
 
     return {
