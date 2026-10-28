@@ -356,4 +356,72 @@
     font-size: var(--fs-xs);
     resize: vertical;
   }
+
+  /* ============================================================
+   * Vectors
+   * ============================================================ */
+
+  .vectors-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+  }
+
+  .vectors-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: var(--gap-sm);
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+
+  .vectors-item-head,
+  .vectors-result-head {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+  }
+
+  .vectors-item-index {
+    font-family: var(--font-mono);
+  }
+
+  .vectors-text {
+    min-height: 72px;
+    font-family: var(--font);
+    font-size: var(--fs-sm);
+    resize: vertical;
+  }
+
+  .vectors-results {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+  }
+
+  .vectors-result-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--gap-sm);
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+
+  .vectors-result-preview {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .vectors-values {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+    color: var(--text);
+    word-break: break-all;
+    max-height: 180px;
+    overflow-y: auto;
+  }
 }

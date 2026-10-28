@@ -29,8 +29,23 @@
     { id: 'tokens',     label: 'Token',   y: (n) => n.avgTotalTokens,                fmt: (v) => RPT.format.number(Math.round(v)) },
     { id: 'cache',      label: '缓存',    y: (n) => n.cacheHitRatio * 100,           fmt: (v) => v.toFixed(2) + '%' },
     { id: 'duration',   label: '耗时',    y: (n) => n.avgDurationNs / 1e6,           fmt: (v) => v.toFixed(1) + ' ms' },
+    { id: 'image',      label: '图像Token', y: (n) => n.avgImageInputTokens + n.avgImageOutputTokens, fmt: (v) => RPT.format.number(Math.round(v)) },
     { id: 'throughput', label: '吞吐',    y: (n) => n.count,                         fmt: (v) => RPT.format.number(Math.round(v)) },
   ]
+
+  /* 横轴标签是纳秒时间戳（字符串）：图表刻度用短格式 */
+  function axisTime(ns) {
+    const n = Number(ns)
+    if (!Number.isFinite(n) || n <= 0) return ''
+    return new Date(n / 1e6).toLocaleTimeString()
+  }
+
+  /* tooltip 标题用完整日期时间；时间戳缺失时不显示裸数字 */
+  function fullTime(ns) {
+    const n = Number(ns)
+    if (Number.isFinite(n) && n > 0) return RPT.format.timestamp(n)
+    return '时间未知'
+  }
 
   /* ============================================================
    * 流式读取
@@ -131,20 +146,28 @@
     box.innerHTML = ''
 
     const avgTokens = s.count ? s.totalTokens / s.count : 0
-    const avgDurationNs = s.count ? s.totalDurationNs / s.count : 0
+    /* 图片日志没有时间轴，平均耗时只对有时长的样本（chat）求平均 */
+    const avgDurationNs = s.durationCount ? s.totalDurationNs / s.durationCount : 0
     const hitRatio = (s.totalHit + s.totalMiss) > 0
       ? s.totalHit / (s.totalHit + s.totalMiss)
       : 0
 
-    box.appendChild(statTile('总请求', RPT.format.number(s.count)))
+    const chatCount = s.kinds.chat || 0
+    const imageCount = s.kinds.image || 0
+
+    box.appendChild(statTile('总请求', RPT.format.number(s.count),
+      `chat ${RPT.format.number(chatCount)} · image ${RPT.format.number(imageCount)}`))
     box.appendChild(statTile('总 Token', RPT.format.tokens(s.totalTokens),
       `平均 ${RPT.format.number(Math.round(avgTokens))}`))
     box.appendChild(statTile('缓存命中率', (hitRatio * 100).toFixed(2) + '%',
       `hit ${RPT.format.tokens(s.totalHit)} / miss ${RPT.format.tokens(s.totalMiss)}`))
-    box.appendChild(statTile('平均耗时', RPT.format.duration(avgDurationNs),
-      `总时长 ${RPT.format.duration(s.totalDurationNs)}`))
+    box.appendChild(statTile('平均耗时', s.durationCount ? RPT.format.duration(avgDurationNs) : '—',
+      `总时长 ${RPT.format.duration(s.totalDurationNs)} · 样本 ${RPT.format.number(s.durationCount)}`))
     box.appendChild(statTile('输入 / 输出',
       `${RPT.format.tokens(s.totalPrompt)} / ${RPT.format.tokens(s.totalCompletion)}`))
+    box.appendChild(statTile('图像 Token',
+      `${RPT.format.tokens(s.totalImageInput)} / ${RPT.format.tokens(s.totalImageOutput)}`,
+      'image 日志的输入 / 输出'))
     box.appendChild(statTile('CoT 长度', RPT.format.number(s.totalReasoning),
       `新内容 ${RPT.format.number(s.totalNewContent)}`))
   }
@@ -185,6 +208,7 @@
           legend: { display: false },
           tooltip: {
             callbacks: {
+              title: (items) => fullTime(items && items.length ? items[0].label : ''),
               label: (ctx) => {
                 const dim = DIMENSIONS.find((d) => d.id === state.dimension)
                 return dim ? `${dim.label}: ${dim.fmt(ctx.parsed.y)}` : ctx.parsed.y
@@ -201,8 +225,7 @@
               color: '#6b7a8f',
               font: { size: 10 },
               callback: function (value) {
-                const label = this.getLabelForValue(value)
-                return label ? new Date(Number(label) / 1e6).toLocaleTimeString() : ''
+                return axisTime(this.getLabelForValue(value))
               },
             },
             grid: { color: '#eef1f5' },
@@ -247,8 +270,11 @@
     if (!body) return
     body.innerHTML = ''
 
+    /* 值可能是 { count, tokens } 也可能是纯计数（类型分布） */
+    const weight = (v) => (v && typeof v === 'object' ? (v.count || 0) : Number(v) || 0)
+
     const sorted = entries
-      .sort((a, b) => b[1].count - a[1].count)
+      .sort((a, b) => weight(b[1]) - weight(a[1]))
       .slice(0, 20)
 
     if (sorted.length === 0) {
@@ -264,8 +290,12 @@
     }
   }
 
+  const KIND_LABELS = { chat: 'chat · 聊天', image: 'image · 图片' }
+
   function renderDistributions() {
     const s = state.buffer.getSummary()
+    const kinds = Object.entries(s.kinds).map(([k, v]) => [KIND_LABELS[k] || k, v])
+    renderDist('kind',  kinds,                    (v) => `${v}`)
     renderDist('model', Object.entries(s.models), (v) => `${v.count} · ${RPT.format.tokens(v.tokens)}`)
     renderDist('user',  Object.entries(s.users),  (v) => `${v.count} · ${RPT.format.tokens(v.tokens)}`)
     renderDist('reason', Object.entries(s.finishReasons), (v) => `${v}`)
@@ -330,6 +360,7 @@
     ])
 
     const distPanel = div({ class: 'rl-distribution' }, [
+      buildDistPanel('类型分布', 'kind'),
       buildDistPanel('模型分布', 'model'),
       buildDistPanel('用户分布', 'user'),
       buildDistPanel('结束原因', 'reason'),

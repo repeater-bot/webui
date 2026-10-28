@@ -55,6 +55,21 @@
     return `${v} ns`
   }
 
+  /* 天 + HH:MM:SS（后端持续运行时长等） */
+  function uptime(ns) {
+    if (ns === null || ns === undefined) return '—'
+    const total = Math.floor(Number(ns) / 1e9)
+    if (!Number.isFinite(total)) return '—'
+
+    const days = Math.floor(total / 86400)
+    const h = Math.floor((total % 86400) / 3600)
+    const m = Math.floor((total % 3600) / 60)
+    const s = total % 60
+    const clock = `${pad(h)}:${pad(m)}:${pad(s)}`
+
+    return days > 0 ? `${days} 天 ${clock}` : clock
+  }
+
   const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB']
 
   function bytes(n) {
@@ -78,6 +93,7 @@
     timestamp,
     relTime,
     duration,
+    uptime,
     bytes,
     tokens: number,
     number,

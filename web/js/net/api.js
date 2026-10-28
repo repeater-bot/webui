@@ -4,6 +4,7 @@
  * - 只有 /admin/* 才注入 X-Admin-API-Key
  * - 非 2xx 时抛 RepeaterError 或 Error
  * - 自动判断 content-type
+ * - as: 'blob' 时直接返回二进制（图片等）
  */
 
 (function () {
@@ -32,7 +33,7 @@
   }
 
   async function raw(path, options = {}) {
-    const { method = 'GET', body, headers = {}, signal } = options
+    const { method = 'GET', body, headers = {}, signal, as = 'auto' } = options
 
     const finalHeaders = { ...headers }
     const init = { method, headers: finalHeaders, signal }
@@ -65,7 +66,9 @@
       }
 
       if (payload && typeof payload === 'object' && 'source_exception' in payload) {
-        throw new RepeaterError(payload)
+        const err = new RepeaterError(payload)
+        err.status = res.status
+        throw err
       }
 
       const detail =
@@ -74,8 +77,13 @@
           : payload
           ? JSON.stringify(payload)
           : res.statusText
-      throw new Error(`HTTP ${res.status}: ${detail}`)
+      /* status 供调用方区分 400（指向目录）/ 404 等语义错误 */
+      const err = new Error(`HTTP ${res.status}: ${detail}`)
+      err.status = res.status
+      throw err
     }
+
+    if (as === 'blob') return res.blob()
 
     const ct = res.headers.get('content-type') || ''
     if (ct.includes('application/json')) return res.json()
@@ -90,6 +98,10 @@
     del:  (path, opts)       => raw(path, { ...opts, method: 'DELETE' }),
     post: (path, body, opts) => raw(path, { ...opts, method: 'POST', body }),
     put:  (path, body, opts) => raw(path, { ...opts, method: 'PUT',  body }),
+    postBlob: (path, body, opts) =>
+      raw(path, { ...opts, method: 'POST', body, as: 'blob' }),
+    getBlob: (path, opts) =>
+      raw(path, { ...opts, method: 'GET', as: 'blob' }),
   }
 
   RPT.api = api

@@ -296,4 +296,19 @@
   .tool-status.success { color: var(--success); }
   .tool-status.failed  { color: var(--danger); }
   .tool-status.pending { color: var(--warning); }
+
+  /* ============================================================
+   * 图片水印
+   * ============================================================ */
+
+  .watermark-preview {
+    margin-top: var(--gap);
+  }
+
+  .watermark-preview .text-dim {
+    padding: var(--gap-sm);
+    border: 1px dashed var(--border);
+    background: var(--bg);
+    font-family: var(--font-mono);
+  }
 }

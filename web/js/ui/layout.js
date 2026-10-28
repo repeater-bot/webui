@@ -20,14 +20,19 @@
   const SIDEBAR_ITEMS = {
     'index':        { label: '主页',     path: '/web/index.html' },
     'user-space':   { label: '用户空间', path: '/web/user-space.html' },
+    'workspace':    { label: '工作区',   path: '/web/workspace.html' },
     'chat':         { label: '聊天',     path: '/web/generate/chat.html' },
     'image':        { label: '图片生成',  path: '/web/generate/image.html' },
     'similarity':   { label: '相似度',   path: '/web/generate/similarity.html' },
+    'vectors':      { label: '向量',     path: '/web/generate/vectors.html' },
     'models':       { label: '模型',     path: '/web/models.html' },
     'alived-users': { label: '活跃用户', path: '/web/alived-users.html' },
+    'alived-time':  { label: '运行时长', path: '/web/alived-time.html' },
+    'perf-monitor': { label: '性能监控', path: '/web/perf-monitor.html' },
     'request-log':  { label: '请求日志', path: '/web/request-log.html' },
     'render':       { label: '渲染',     path: '/web/render.html' },
     'template':     { label: '模板',     path: '/web/template.html' },
+    'watermark':    { label: '图片水印', path: '/web/watermark.html' },
     'license':      { label: '许可证',   path: '/web/license.html' },
     'admin':        { label: '管理',     path: '/web/admin.html' },
     'settings':     { label: '设置',     path: '/web/settings.html' },
@@ -38,19 +43,24 @@
     items: [
       { type: 'item', id: 'index' },
       { type: 'item', id: 'user-space' },
+      { type: 'item', id: 'workspace' },
       { type: 'group', id: 'g-gen', name: '生成', collapsed: true, children: [
         { type: 'item', id: 'chat' },
         { type: 'item', id: 'image' },
         { type: 'item', id: 'similarity' },
+        { type: 'item', id: 'vectors' },
       ]},
       { type: 'group', id: 'g-observe', name: '观测', collapsed: true, children: [
         { type: 'item', id: 'models' },
         { type: 'item', id: 'alived-users' },
+        { type: 'item', id: 'alived-time' },
+        { type: 'item', id: 'perf-monitor' },
         { type: 'item', id: 'request-log' },
       ]},
       { type: 'group', id: 'g-tools', name: '工具', collapsed: true, children: [
         { type: 'item', id: 'render' },
         { type: 'item', id: 'template' },
+        { type: 'item', id: 'watermark' },
         { type: 'item', id: 'license' },
       ]},
       { type: 'item', id: 'admin' },
@@ -72,6 +82,68 @@
       RPT.sidebarLayout.save(loaded)
     }
     layout = loaded
+    ensureKnownItems()
+  }
+
+  /*
+   * 新版本可能新增侧栏条目，而旧布局里没有它们
+   * （sidebar-layout.js 的 prune 只保留已知 id，不会自动补新项）。
+   * 这里按默认布局把缺失的条目补回去：
+   * - 组内条目 → 放回默认分组末尾
+   * - 根级条目 → 插到默认顺序里前一个根节点后面，保持原有位置关系
+   */
+  function ensureKnownItems() {
+    const present = new Set()
+    for (const node of layout.items) {
+      if (node.type === 'item') {
+        present.add(node.id)
+      } else {
+        for (const child of node.children || []) present.add(child.id)
+      }
+    }
+
+    let changed = false
+    let anchorId = null
+
+    const insertRoot = (node) => {
+      const idx = anchorId
+        ? layout.items.findIndex((n) => n.id === anchorId)
+        : -1
+      if (idx >= 0) layout.items.splice(idx + 1, 0, node)
+      else layout.items.push(node)
+      changed = true
+    }
+
+    const placeChild = (id, groupId) => {
+      if (!SIDEBAR_ITEMS[id] || present.has(id)) return
+      const group = groupId
+        ? layout.items.find((n) => n.type === 'group' && n.id === groupId)
+        : null
+      if (group) {
+        group.children.push({ type: 'item', id })
+        changed = true
+      } else {
+        insertRoot({ type: 'item', id })
+      }
+      present.add(id)
+    }
+
+    for (const node of SIDEBAR_DEFAULTS.items) {
+      if (node.type === 'item') {
+        if (SIDEBAR_ITEMS[node.id] && !present.has(node.id)) {
+          insertRoot({ type: 'item', id: node.id })
+          present.add(node.id)
+        }
+        if (present.has(node.id)) anchorId = node.id
+      } else {
+        for (const child of node.children) placeChild(child.id, node.id)
+        if (layout.items.some((n) => n.type === 'group' && n.id === node.id)) {
+          anchorId = node.id
+        }
+      }
+    }
+
+    if (changed) persist()
   }
 
   function persist() {

@@ -1,0 +1,382 @@
+/*
+ * Perf Monitor 页面样式（性能监控）
+ */
+
+@layer page {
+
+  .main.pm-main {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - var(--topbar-h));
+    padding: var(--gap-lg);
+    gap: var(--gap);
+    overflow-y: auto;
+    min-height: 0;
+  }
+
+  /* ---------- 工具条 ---------- */
+  .pm-toolbar {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: var(--gap-sm) var(--gap);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .pm-toolbar .form-label {
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  .pm-interval { width: 82px; }
+  .pm-all-parts { font-size: var(--fs-sm); }
+
+  .pm-status {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  .pm-status.is-danger { color: var(--danger); }
+
+  /* ---------- 概览卡片 ---------- */
+  .pm-cards {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: var(--gap);
+  }
+
+  .pm-card {
+    padding: var(--gap);
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+  }
+
+  .pm-card-label {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .pm-card-value {
+    margin-top: 4px;
+    font-size: 24px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text);
+    line-height: 1.15;
+  }
+
+  .pm-card-sub {
+    margin-top: 2px;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  /* ---------- 面板 ---------- */
+  .pm-panels {
+    flex: none;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: var(--gap);
+  }
+
+  .pm-panel {
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    min-height: 0;
+  }
+
+  .pm-panel-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px var(--gap);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-code);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  .pm-panel-body {
+    padding: var(--gap);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  /* ---------- 进度条 ---------- */
+  .pm-bar-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .pm-bar {
+    height: 8px;
+    background: var(--bg-code);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .pm-bar-fill {
+    height: 100%;
+    width: 0;
+    transition: width 0.3s ease;
+    background: var(--accent);
+  }
+
+  .pm-bar-fill.is-ok { background: var(--accent); }
+  .pm-bar-fill.is-warning { background: var(--warning); }
+  .pm-bar-fill.is-danger { background: var(--danger); }
+
+  .pm-bar-label {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  /* ---------- CPU 每核 ---------- */
+  .pm-cores {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+    gap: var(--gap-sm);
+  }
+
+  .pm-core {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 8px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+  }
+
+  .pm-core-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 4px;
+  }
+
+  .pm-core-name {
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  .pm-core-value {
+    font-size: var(--fs-sm);
+    font-family: var(--font-mono);
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .pm-core-value.is-warning { color: var(--warning); }
+  .pm-core-value.is-danger { color: var(--danger); }
+
+  /* ---------- 磁盘 ---------- */
+  .pm-disk-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--gap-sm) 0;
+    border-bottom: 1px dashed var(--border);
+  }
+
+  .pm-disk-row:last-child { border-bottom: none; }
+
+  .pm-disk-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--gap-sm);
+  }
+
+  .pm-disk-mount {
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pm-disk-percent {
+    flex: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-sm);
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .pm-disk-percent.is-warning { color: var(--warning); }
+  .pm-disk-percent.is-danger { color: var(--danger); }
+
+  .pm-disk-meta {
+    font-family: var(--font-mono);
+    line-height: 1.5;
+    word-break: break-all;
+  }
+
+  /* ---------- 表格 ---------- */
+  .pm-table {
+    display: flex;
+    flex-direction: column;
+    font-size: var(--fs-xs);
+  }
+
+  .pm-tr {
+    display: grid;
+    gap: var(--gap-sm);
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+    align-items: center;
+  }
+
+  .pm-tr:last-child { border-bottom: none; }
+
+  .pm-table-net .pm-tr { grid-template-columns: 1fr 90px 90px 1.4fr; }
+  .pm-table-conn .pm-tr { grid-template-columns: 0.7fr 1.5fr 1fr 0.5fr; }
+  .pm-table-listen .pm-tr { grid-template-columns: 0.7fr 1.6fr 1fr 1fr; }
+
+  .pm-th {
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .pm-td-mono {
+    font-family: var(--font-mono);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* ---------- 系统信息 ---------- */
+  .pm-system {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .pm-section {
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+  }
+
+  .pm-section-title {
+    padding: 6px var(--gap);
+    background: var(--bg-code);
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+  }
+
+  .pm-section-title::-webkit-details-marker { display: none; }
+
+  .pm-section-title::before {
+    content: '▸';
+    display: inline-block;
+    width: 12px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .pm-section[open] > .pm-section-title::before { content: '▾'; }
+
+  .pm-section-body {
+    padding: var(--gap);
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+  }
+
+  .pm-kv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 2px var(--gap-lg);
+  }
+
+  .pm-kv {
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: var(--gap-sm);
+    padding: 2px 0;
+    border-bottom: 1px dashed var(--border);
+    font-size: var(--fs-xs);
+  }
+
+  .pm-kv-key {
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .pm-kv-val {
+    font-family: var(--font-mono);
+    color: var(--text);
+    word-break: break-all;
+    line-height: 1.5;
+  }
+
+  .pm-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .pm-chip {
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--accent-hover);
+    background: var(--accent-light);
+    border: 1px solid var(--border-hover);
+    padding: 1px 6px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .pm-hint {
+    margin-top: var(--gap-sm);
+    font-family: var(--font-mono);
+    line-height: 1.5;
+  }
+
+  /* 系统信息拉取失败时的提示 */
+  .pm-system-error {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: var(--gap);
+    background: var(--danger-light);
+    border: 1px solid var(--danger);
+    font-family: var(--font-mono);
+  }
+
+  /* 小屏：面板单列 */
+  @media (max-width: 900px) {
+    .pm-panels { grid-template-columns: 1fr; }
+    .pm-kv { grid-template-columns: 110px 1fr; }
+  }
+}
