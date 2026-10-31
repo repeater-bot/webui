@@ -5,12 +5,13 @@
  * 右侧：编辑器区域 —— 标签页（多文件）+ 面包屑工具栏 + 全高编辑区
  *
  * 后端接口见 docs/api_table/workspace_api：
- *   list_dir / glob / rematch / get_info / exists / get_text / get_file /
+ *   get_text / list_dir / glob / rematch / get_info / exists / get_text / get_file /
  *   write_file / mkdir / move / copy / delete
+ *   新增：tree（带类型的嵌套树）/ is_dir / is_file / touch（建空文件）/
+ *         du（统计）/ hash（摘要）/ append / truncate / edit / copy_range
  *
- * list_dir 只返回路径、不返回类型：
- * 用一次 list_dir(根, recursive=true) 的结果构整棵树 ——
- * 出现在其他路径前缀里的就是目录，其余按文件处理（空目录会在点开时用 400 回退纠正）。
+ * 树优先用一次 /workspace/tree 拿到完整结构（空目录、类型都准确）；
+ * 老后端没有该接口时回退到 list_dir(recursive=true) + 路径前缀推断。
  */
 
 (function () {
@@ -20,26 +21,106 @@
 
   const ENCODINGS = ['utf-8', 'gbk', 'gb18030', 'big5', 'latin-1', 'utf-16']
 
+  /*
+   * 二进制文件预览：
+   * 先按扩展名判断，再按文件头（magic bytes）兜底，
+   * 能在浏览器里直接显示的就用手生的 <img>/<video>/<audio>/<embed>。
+   */
+  const MEDIA_EXT = {
+    image: /\.(png|jpe?g|gif|webp|bmp|ico|avif)$/i,
+    video: /\.(mp4|m4v|webm|ogv|mov|mkv)$/i,
+    audio: /\.(mp3|wav|ogg|oga|flac|m4a|aac|opus)$/i,
+    pdf:   /\.pdf$/i,
+  }
+
+  const MIME_BY_EXT = {
+    png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+    webp: 'image/webp', bmp: 'image/bmp', ico: 'image/x-icon', avif: 'image/avif',
+    mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogv: 'video/ogg',
+    mov: 'video/quicktime', mkv: 'video/x-matroska',
+    mp3: 'audio/mpeg', wav: 'audio/wav', ogg: 'audio/ogg', oga: 'audio/ogg',
+    flac: 'audio/flac', m4a: 'audio/mp4', aac: 'audio/aac', opus: 'audio/opus',
+    pdf: 'application/pdf',
+  }
+
+  function extMediaKind(path) {
+    for (const kind of Object.keys(MEDIA_EXT)) {
+      if (MEDIA_EXT[kind].test(path)) return kind
+    }
+    return ''
+  }
+
+  function sniffMediaKind(bytes) {
+    const b = Array.from(bytes || [])
+    const ascii = (from, to) => String.fromCharCode(...b.slice(from, to))
+
+    if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) return 'image'   // PNG
+    if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return 'image'                   // JPEG
+    if (ascii(0, 3) === 'GIF') return 'image'                                             // GIF
+    if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP') return 'image'                 // WEBP
+    if (b[0] === 0x42 && b[1] === 0x4D) return 'image'                                    // BMP
+    if (ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WAVE') return 'audio'                 // WAV
+    if (ascii(0, 4) === 'OggS') return 'audio'                                            // OGG
+    if (ascii(0, 3) === 'ID3') return 'audio'                                             // MP3
+    if (b[0] === 0xFF && (b[1] & 0xE0) === 0xE0) return 'audio'                           // MP3 帧头
+    if (ascii(4, 8) === 'ftyp') return 'video'                                            // MP4/MOV
+    if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return 'video'  // WebM/MKV
+    if (ascii(0, 4) === '%PDF') return 'pdf'
+    return ''
+  }
+
+  function mimeOf(path) {
+    const ext = (baseName(path).split('.').pop() || '').toLowerCase()
+    return MIME_BY_EXT[ext] || ''
+  }
+
+  /* 类型标签：拿不到具体 MIME 时用中文大类 */
+  const KIND_LABEL = {
+    image: '图片',
+    video: '视频',
+    audio: '音频',
+    pdf: 'PDF',
+    binary: '二进制',
+  }
+
+  function kindLabel(tab) {
+    return tab.mime || KIND_LABEL[tab.kind] || '二进制'
+  }
+
+  /* 图标统一由 RPT.dom.svgIcon 提供 */
+  const icon = RPT.dom.svgIcon
+
   const TEXT_EXT = /\.(txt|md|markdown|json|jsonl|ya?ml|js|mjs|ts|css|html?|py|ini|conf|toml|log|csv|xml)$/i
 
   const state = {
     dirs: new Set(['']),
     children: new Map([['', []]]),
+    sizes: new Map(),          // /workspace/tree 带回来的文件大小
     expanded: new Set(['']),
     selected: null,          // 树里选中的路径
     tabs: [],                // { path, text, info, dirty, encoding }
     active: null,
-    encoding: 'utf-8',
-    search: { active: false, pattern: '', recursive: true, results: [] },
+    encoding: RPT.cfg('workspaceEncoding', 'utf-8'),
+    search: {
+      active: false,
+      pattern: '',
+      recursive: RPT.cfg('workspaceSearchRecursive', true),
+      results: [],
+    },
     status: '就绪',
     loading: false,
+    inline: null,              // 内联新建：{ kind: 'file'|'dir', parent, value, focused, busy }
     dragging: null,        // 树内拖拽的源路径
     importCount: 0,        // 外部导入的文件计数
+    importThreshold: 0,    // 下一次「继续上传？」的阈值
     importAborted: false,
   }
 
-  /* 一次外部导入最多处理多少个文件（防止误拖超大目录） */
-  const MAX_IMPORT = 500
+  /*
+   * 外部导入不设硬上限：
+   * 超过设置里的「导入询问阈值」（默认 100）个文件先弹窗确认，
+   * 之后每多「导入再询问步长」（默认 500）个再问一次。
+   */
 
   /* 剪贴板：复制 / 剪切，粘贴时走 move / copy 端点 */
   let clipboard = null   // { mode: 'copy' | 'cut', path }
@@ -85,6 +166,29 @@
     if (typeof e.status === 'number') return e.status
     if (typeof e.code === 'number') return e.code
     return 0
+  }
+
+  /*
+   * 404 有两种来源，必须区分：
+   * - 后端没有这个路由（旧版本）→ error_message 就是 "Not Found"
+   * - 后端有这个路由、但工作区里没有这个数据 → DataServer 给的
+   *   "File xxx not found" / "Directory xxx not found" 之类的具体消息
+   */
+  function routeMissing(e) {
+    if (statusOf(e) !== 404) return false
+    const msg = String((e && (e.message_raw || e.message)) || '').trim()
+    return /^(HTTP 404:\s*)?Not Found$/i.test(msg) || msg === ''
+  }
+
+  /* 接口可用性缓存：旧后端缺接口时只探测一次，之后直接走回退分支 */
+  const cap = { tree: null, touch: null, du: null, hash: null, isDir: null }
+
+  function capUsable(name) {
+    return cap[name] !== false
+  }
+
+  function capMark(name, ok) {
+    cap[name] = !!ok
   }
 
   /* ============================================================
@@ -143,14 +247,79 @@
 
     state.dirs = dirs
     state.children = children
+    state.sizes = new Map()
+  }
+
+  /* 新后端：/workspace/tree 直接给出带类型的嵌套树（空目录也在） */
+  function applyTreePayload(root) {
+    const children = new Map([['', []]])
+    const dirs = new Set([''])
+    const sizes = new Map()
+
+    const walk = (node) => {
+      if (!node || typeof node !== 'object') return
+
+      const p = normalizePath(node.path)
+      const isDirectory = node.type === 'directory'
+
+      if (p) {
+        const parent = parentOf(p)
+        if (!children.has(parent)) children.set(parent, [])
+        const list = children.get(parent)
+        if (!list.includes(p)) list.push(p)
+      }
+
+      if (isDirectory) {
+        dirs.add(p)
+        if (!children.has(p)) children.set(p, [])
+        for (const child of node.children || []) walk(child)
+      } else if (typeof node.size === 'number') {
+        sizes.set(p, node.size)
+      }
+    }
+
+    walk(root)
+
+    for (const [, list] of children) {
+      list.sort((a, b) => {
+        const da = dirs.has(a) ? 0 : 1
+        const db = dirs.has(b) ? 0 : 1
+        if (da !== db) return da - db
+        return baseName(a).localeCompare(baseName(b), 'zh-CN')
+      })
+    }
+
+    state.dirs = dirs
+    state.children = children
+    state.sizes = sizes
   }
 
   async function loadTree() {
     state.loading = true
     renderTree()
     try {
-      const raw = await RPT.apiWorkspace.listDir('', true)
-      buildTree(Array.isArray(raw) ? raw : [])
+      let usedTree = false
+
+      if (capUsable('tree')) {
+        try {
+          /* 新接口：一次拿到完整嵌套树 */
+          const payload = await RPT.apiWorkspace.tree('', -1)
+          applyTreePayload(payload)
+          capMark('tree', true)
+          usedTree = true
+        } catch (e) {
+          /* 只有“没有这个路由”才回退；数据不存在（404 但带具体消息）要如实报错 */
+          if (!routeMissing(e)) throw e
+          capMark('tree', false)
+        }
+      }
+
+      if (!usedTree) {
+        /* 老后端没有 /tree：回退到递归 list_dir + 前缀推断 */
+        const raw = await RPT.apiWorkspace.listDir('', true)
+        buildTree(Array.isArray(raw) ? raw : [])
+      }
+
       state.loading = false
       if (state.selected && !nodeExists(state.selected)) state.selected = null
       renderTree()
@@ -188,9 +357,10 @@
     renderTree()
   }
 
-  /* 可见节点（展开状态下的前序展平），根在最前 */
+  /* 可见节点（展开状态下的前序展平），根在最前；新建输入框挂在目标目录的子项末尾 */
   function visibleNodes() {
     const out = [{ path: '', depth: 0, isDir: true, root: true }]
+    const inline = state.inline
 
     const walk = (dir, depth) => {
       for (const p of childrenOf(dir)) {
@@ -198,9 +368,14 @@
         out.push({ path: p, depth, isDir: dirFlag })
         if (dirFlag && state.expanded.has(p)) walk(p, depth + 1)
       }
+      if (inline && inline.parent === normalizePath(dir)) {
+        out.push({ inline: true, depth, parent: normalizePath(dir) })
+      }
     }
 
     if (state.expanded.has('')) walk('', 1)
+    else if (inline && inline.parent === '') out.push({ inline: true, depth: 1, parent: '' })
+
     return out
   }
 
@@ -209,7 +384,7 @@
    * ============================================================ */
 
   function iconFor(node) {
-    return span({ class: ['ws-icon', node.isDir ? 'is-folder' : 'is-file'] })
+    return icon(node.isDir ? 'folder' : 'file', 13)
   }
 
   function nodeRow(node) {
@@ -228,7 +403,7 @@
         if (!kids.length) return
         toggleDir(path)
       },
-    }, [kids.length ? (expanded ? '▾' : '▸') : ''])
+    }, [kids.length ? icon(expanded ? 'chevron-down' : 'chevron-right', 12) : '' ])
 
     const row = div({
       class: [
@@ -285,6 +460,159 @@
     openFile(node.path)
   }
 
+  /* ============================================================
+   * 新建（VSCode 式：在目录位置内联输入，回车提交）
+   * ============================================================ */
+
+  /* 新建的目标目录：选中目录→其内部；选中文件→同级；否则根 */
+  function newNodeDir() {
+    if (state.selected == null || state.selected === '') return ''
+    return isDir(state.selected) ? state.selected : parentOf(state.selected)
+  }
+
+  function startInlineCreate(kind, dirOpt) {
+    let parent = typeof dirOpt === 'string' ? normalizePath(dirOpt) : newNodeDir()
+
+    /* 只接受目录作为父级 */
+    if (parent && !isDir(parent) && !state.children.has(parent)) parent = parentOf(parent)
+
+    closeContextMenu()
+    if (state.search.active) clearSearch()
+
+    expandTo(parent)
+    state.expanded.add(parent)
+
+    state.inline = { kind, parent, value: '', focused: false, busy: false }
+    renderTree()
+
+    const input = q('ws-inline-input')
+    if (input) {
+      input.focus()
+      if (input.scrollIntoView) input.scrollIntoView({ block: 'nearest' })
+    }
+  }
+
+  function cancelInline() {
+    if (!state.inline) return
+    const kind = state.inline.kind
+    state.inline = null
+    renderTree()
+    setStatus(kind === 'dir' ? '已取消新建目录' : '已取消新建文件')
+  }
+
+  /* 行内输入框：回车提交、Esc 取消、失焦取消 */
+  function inlineRow(node) {
+    const inline = state.inline
+    const isFileKind = inline.kind === 'file'
+
+    const inputEl = RPT.dom.el('input', {
+      class: 'ws-inline-input',
+      dataset: { panel: 'ws-inline-input' },
+      value: inline.value || '',
+      placeholder: isFileKind ? '文件名（回车创建）' : '目录名（回车创建）',
+      onInput: (e) => { inline.value = e.target.value },
+      onKeydown: (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commitInline() }
+        else if (e.key === 'Escape') { e.preventDefault(); cancelInline() }
+      },
+      onBlur: () => {
+        /* 提交过程中不要因为失焦取消 */
+        if (state.inline && !state.inline.busy) cancelInline()
+      },
+    })
+
+    if (!inline.focused) {
+      inline.focused = true
+      setTimeout(() => {
+        if (state.inline !== inline) return
+        inputEl.focus()
+        inputEl.select()
+      }, 0)
+    }
+
+    return div({
+      class: ['ws-node', 'ws-inline'],
+      style: { paddingLeft: `${8 + node.depth * 14}px` },
+    }, [
+      span({ class: 'ws-caret' }),
+      icon(isFileKind ? 'file' : 'folder', 13),
+      inputEl,
+    ])
+  }
+
+  async function commitInline() {
+    const inline = state.inline
+    if (!inline || inline.busy) return
+
+    const name = String(inline.value || '').trim()
+    if (!name) { cancelInline(); return }
+
+    if (name.includes('/') || name === '.' || name === '..') {
+      RPT.notify.toast('名称不能包含 “/”', 'warning')
+      return
+    }
+
+    const target = joinPath(inline.parent, name)
+    inline.busy = true
+    setStatus(`创建 ${target} ...`)
+
+    try {
+      if (inline.kind === 'dir') {
+        const created = await createDir(target)
+        if (!created) {
+          const err = new Error('已存在同名文件或目录')
+          err.status = 409
+          throw err
+        }
+      } else {
+        await createEmptyFile(target)
+      }
+
+      state.inline = null
+      state.selected = target
+      await loadTree()
+      expandTo(target)
+      if (inline.kind === 'dir') state.expanded.add(target)
+      renderTree()
+      setStatus(`已创建 ${target}`)
+
+      if (inline.kind === 'file') await openFile(target)
+    } catch (e) {
+      inline.busy = false
+      inline.focused = false
+      const dup = statusOf(e) === 409
+      RPT.notify.toast(dup ? `已存在：${name}` : (e.message || '创建失败'), dup ? 'warning' : 'danger')
+      setStatus(dup ? '已存在同名项' : '创建失败', 'is-danger')
+      renderTree()
+      const input = q('ws-inline-input')
+      if (input) input.focus()
+    }
+  }
+
+  /* 空文件：新后端用 touch，老后端退回 write_file */
+  async function createEmptyFile(target) {
+    let created = false
+
+    if (capUsable('touch')) {
+      try {
+        await RPT.apiWorkspace.touch(target)
+        capMark('touch', true)
+        created = true
+      } catch (e) {
+        if (!routeMissing(e)) throw e
+        capMark('touch', false)
+      }
+    }
+
+    if (!created) {
+      await RPT.apiWorkspace.writeFile(
+        target,
+        new Blob([''], { type: 'text/plain;charset=utf-8' }),
+        baseName(target)
+      )
+    }
+  }
+
   function renderTree() {
     const body = q('ws-tree')
     if (!body) return
@@ -301,7 +629,9 @@
     }
 
     const nodes = visibleNodes()
-    for (const node of nodes) body.appendChild(nodeRow(node))
+    for (const node of nodes) {
+      body.appendChild(node.inline ? inlineRow(node) : nodeRow(node))
+    }
 
     if (nodes.length <= 1) {
       body.appendChild(div({ class: 'ws-tree-empty text-dim text-xs' }, ['工作区是空的']))
@@ -336,7 +666,7 @@
         },
       }, [
         span({ class: 'ws-caret' }),
-        span({ class: ['ws-icon', isDir(item.path) ? 'is-folder' : 'is-file'] }),
+        icon(isDir(item.path) ? 'folder' : 'file', 13),
         span({ class: 'ws-node-name' }, [item.path]),
       ])
       body.appendChild(row)
@@ -366,8 +696,8 @@
 
     if (!isDirNode) items.push({ label: '打开', action: () => openFile(node.path) })
 
-    items.push({ label: '新建文件…', action: () => createFile(targetDir) })
-    items.push({ label: '新建目录…', action: () => createDirPrompt(targetDir) })
+    items.push({ label: '新建文件', action: () => startInlineCreate('file', targetDir) })
+    items.push({ label: '新建目录', action: () => startInlineCreate('dir', targetDir) })
     items.push({
       label: '粘贴',
       action: () => pasteInto(targetDir),
@@ -393,8 +723,11 @@
     })
 
     if (!isDirNode) {
+      items.push({ label: '在新标签页打开', action: () => openInNewTab(node.path) })
       items.push({ label: '下载', action: () => downloadFile(node.path) })
+      items.push({ label: '复制 SHA256', action: () => copyHash(node.path) })
     }
+    items.push({ label: '统计大小', action: () => showDiskUsage(node.path) })
     items.push({ label: '复制路径', action: () => copyText(node.path || '/') })
 
     items.push({ sep: true })
@@ -498,12 +831,20 @@
       return
     }
 
+    /* 已知的多媒体类型直接走预览，省一次必然失败的 get_text */
+    const kind = extMediaKind(target)
+    if (kind) {
+      await openPreviewTab(target, kind)
+      return
+    }
+
     setStatus('读取中...')
     try {
       const text = await RPT.apiWorkspace.getText(target, state.encoding)
 
       const tab = {
         path: target,
+        kind: 'text',
         text,
         info: null,
         dirty: false,
@@ -525,18 +866,108 @@
       setStatus(`已打开 ${target}`)
     } catch (e) {
       if (statusOf(e) === 400) {
-        /* 空目录被当成了文件：纠正类型并展开 */
-        state.dirs.add(target)
-        expandTo(target)
-        state.expanded.add(target)
-        ensureChildEdge(target)
-        renderTree()
-        setStatus(`${target} 是目录`)
+        /* 400：要么是目录，要么是没法按该编码解码的二进制文件 */
+        let isDirNode = false
+        if (capUsable('isDir')) {
+          try {
+            isDirNode = await RPT.apiWorkspace.isDir(target)      // 新接口
+            capMark('isDir', true)
+          } catch (err) {
+            if (routeMissing(err)) capMark('isDir', false)        // 老后端：以后直接走探测
+            isDirNode = (await probeEntry(target)).kind === 'dir'
+          }
+        } else {
+          isDirNode = (await probeEntry(target)).kind === 'dir'
+        }
+
+        if (isDirNode) {
+          /* 空目录被当成了文件：纠正类型并展开 */
+          state.dirs.add(target)
+          expandTo(target)
+          state.expanded.add(target)
+          ensureChildEdge(target)
+          renderTree()
+          setStatus(`${target} 是目录`)
+          return
+        }
+
+        /* 不是目录：多半是二进制，交给预览（会按文件头嗅探类型） */
+        await openPreviewTab(target, '')
         return
       }
       setStatus('读取失败', 'is-danger')
       RPT.notify.error(e)
     }
+  }
+
+  /*
+   * 打开二进制文件：取 blob → 嗅探类型 → 生成 object URL → 建一个非文本标签页
+   * kindHint 为空时按文件头判断；判断不出来就显示「不支持预览」+ 两个出口
+   */
+  async function openPreviewTab(target, kindHint) {
+    setStatus('读取中...')
+
+    try {
+      const blob = await RPT.apiWorkspace.getFile(target)
+      const head = new Uint8Array(await blob.slice(0, 32).arrayBuffer())
+      const kind = kindHint || sniffMediaKind(head)
+
+      /* 后端 get_file 统一返回 application/octet-stream，这里按扩展名纠正 */
+      const solid = blob.type && blob.type !== 'application/octet-stream' ? blob.type : ''
+      const mime = solid || mimeOf(target)
+
+      /* 小文件补上类型（浏览器预览更准）；大文件直接复用原 blob，避免再复制一份内存 */
+      const body = mime && blob.size <= 8 * 1024 * 1024 ? new Blob([blob], { type: mime }) : blob
+      const url = URL.createObjectURL(body)
+
+      const tab = {
+        path: target,
+        kind: kind || 'binary',
+        mime,
+        url,
+        text: '',
+        dirty: false,
+        encoding: '',
+        info: null,
+      }
+
+      state.tabs.push(tab)
+      state.active = target
+      expandTo(target)
+
+      try {
+        tab.info = await RPT.apiWorkspace.getInfo(target)
+      } catch {
+        tab.info = null
+      }
+
+      renderTabs()
+      renderEditor()
+      renderTree()
+      setStatus(`已打开 ${target}${mime ? ` · ${mime}` : ''}`)
+    } catch (e) {
+      if (statusOf(e) === 404) {
+        setStatus(`文件不存在：${target}`, 'is-danger')
+        return
+      }
+      setStatus('读取失败', 'is-danger')
+      RPT.notify.error(e)
+    }
+  }
+
+  /* 直接打开读接口地址：浏览器原生展示 / 下载 */
+  function openInNewTab(path) {
+    const target = normalizePath(path)
+    if (!target) return
+
+    /* 拼成绝对地址：新标签页里能看到/复制完整读取链接 */
+    const url = new URL(RPT.apiWorkspace.rawUrl(target), window.location.href).href
+    const win = window.open(url, '_blank', 'noopener')
+    if (!win) {
+      RPT.notify.toast('新标签页被浏览器拦截了', 'warning')
+      return
+    }
+    setStatus(`新标签页打开 ${target}`)
   }
 
   /* 把一个目录挂到父节点下（空目录纠正后） */
@@ -577,6 +1008,7 @@
     }
 
     state.tabs.splice(idx, 1)
+    if (tab.url) URL.revokeObjectURL(tab.url)
     if (state.active === path) {
       const next = state.tabs[idx] || state.tabs[idx - 1] || null
       state.active = next ? next.path : null
@@ -610,13 +1042,13 @@
         },
         onMousedown: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(tab.path) } },
       }, [
-        span({ class: ['ws-icon', 'is-file'] }),
+        icon('file', 13),
         span({ class: 'ws-tab-name' }, [baseName(tab.path)]),
         span({
           class: 'ws-tab-close',
           title: '关闭',
           onClick: (e) => { e.stopPropagation(); closeTab(tab.path) },
-        }, ['×']),
+        }, [icon('close', 11)]),
       ]))
     }
   }
@@ -627,14 +1059,21 @@
 
   function renderEditor() {
     const editor = q('ws-editor')
+    const preview = q('ws-preview')
     const empty = q('ws-empty')
     const toolbar = q('ws-editor-toolbar')
     const tab = activeTab()
+    const isText = !!tab && (tab.kind || 'text') === 'text'
 
     if (editor) {
-      editor.value = tab ? tab.text : ''
-      editor.disabled = !tab
-      editor.style.display = tab ? 'block' : 'none'
+      editor.value = isText ? tab.text : ''
+      editor.disabled = !isText
+      editor.style.display = isText ? 'block' : 'none'
+      editor.readOnly = !isText
+    }
+    if (preview) {
+      renderPreview(preview, tab)
+      preview.style.display = tab && !isText ? 'flex' : 'none'
     }
     if (empty) empty.style.display = tab ? 'none' : 'flex'
     if (toolbar) toolbar.style.display = tab ? 'flex' : 'none'
@@ -644,7 +1083,79 @@
     renderMeta(tab)
 
     const enc = q('ws-encoding')
-    if (enc && tab) enc.value = tab.encoding
+    if (enc && tab) {
+      enc.value = tab.encoding || 'utf-8'
+      enc.disabled = !isText
+    }
+
+    /* 非文本文件：编码 / 重读 / 保存 都没有意义，直接收起来省地方 */
+    const show = (el, visible) => { if (el) el.style.display = visible ? '' : 'none' }
+    show(q('ws-save'), isText)
+    show(q('ws-reload'), isText)
+    show(q('ws-enc-label'), isText)
+    show(enc, isText)
+  }
+
+  /* 图片 / 视频 / 音频 / PDF 直接渲染，其余给出口 */
+  function renderPreview(el, tab) {
+    el.innerHTML = ''
+    if (!tab || (tab.kind || 'text') === 'text') return
+
+    const stage = (child, cls) => div({ class: ['ws-preview-stage', cls || ''] }, [child])
+
+    if (tab.kind === 'image') {
+      el.appendChild(stage(RPT.dom.el('img', {
+        class: 'ws-preview-media',
+        src: tab.url,
+        alt: baseName(tab.path),
+        title: '点击在新标签页打开原图',
+        onClick: () => openInNewTab(tab.path),
+      })))
+      return
+    }
+
+    if (tab.kind === 'video') {
+      el.appendChild(stage(RPT.dom.el('video', {
+        class: 'ws-preview-media',
+        src: tab.url,
+        controls: true,
+        preload: 'metadata',
+      })))
+      return
+    }
+
+    if (tab.kind === 'audio') {
+      el.appendChild(stage(RPT.dom.el('audio', {
+        class: ['ws-preview-media', 'is-audio'],
+        src: tab.url,
+        controls: true,
+        preload: 'metadata',
+      })))
+      return
+    }
+
+    if (tab.kind === 'pdf') {
+      el.appendChild(RPT.dom.el('embed', {
+        class: 'ws-preview-pdf',
+        src: tab.url,
+        type: 'application/pdf',
+      }))
+      return
+    }
+
+    el.appendChild(div({ class: 'ws-preview-empty' }, [
+      icon('file', 30),
+      div({ class: 'ws-preview-title' }, [baseName(tab.path)]),
+      div({ class: 'ws-preview-hint text-dim text-xs' }, [
+        `类型 ${kindLabel(tab)} · 浏览器不能直接展示这个文件`,
+      ]),
+      div({ class: 'ws-preview-actions' }, [
+        button({ class: 'btn btn-sm', onClick: () => openInNewTab(tab.path) },
+          [icon('external', 13), '在新标签页打开']),
+        button({ class: 'btn btn-sm', onClick: () => downloadFile(tab.path) },
+          [icon('download', 13), '下载']),
+      ]),
+    ]))
   }
 
   function renderCrumbs(tab) {
@@ -671,16 +1182,26 @@
     }
   }
 
+  function tabSize(tab) {
+    if (tab.info) return tab.info.size
+    const fromTree = state.sizes.get(tab.path)
+    return typeof fromTree === 'number' ? fromTree : null
+  }
+
   function renderMeta(tab) {
     const el = q('ws-editor-meta')
     if (!el) return
     el.innerHTML = ''
     if (!tab) return
 
+    const size = tabSize(tab)
+    const isText = (tab.kind || 'text') === 'text'
     const rows = [
-      ['大小', tab.info ? RPT.format.bytes(tab.info.size) : '—'],
+      ['大小', size == null ? '—' : RPT.format.bytes(size)],
       ['修改', tab.info ? RPT.format.timestamp(tab.info.st_mtime_ns) : '—'],
-      ['字符', RPT.format.number(tab.text.length)],
+      isText
+        ? ['字符', RPT.format.number(tab.text.length)]
+        : ['类型', kindLabel(tab)],
     ]
     for (const [k, v] of rows) {
       el.appendChild(div({ class: 'ws-meta-item' }, [
@@ -700,11 +1221,13 @@
       return
     }
 
+    const size = tabSize(tab)
+    const isText = (tab.kind || 'text') === 'text'
     const parts = [
       tab.path,
-      tab.info ? RPT.format.bytes(tab.info.size) : null,
-      `${RPT.format.number(tab.text.length)} 字符`,
-      tab.encoding.toUpperCase(),
+      size == null ? null : RPT.format.bytes(size),
+      isText ? `${RPT.format.number(tab.text.length)} 字符` : kindLabel(tab),
+      isText ? (tab.encoding || '').toUpperCase() : null,
       tab.dirty ? '未保存' : null,
     ].filter(Boolean)
 
@@ -730,7 +1253,7 @@
 
   async function saveActive() {
     const tab = activeTab()
-    if (!tab) return
+    if (!tab || (tab.kind || 'text') !== 'text') return
 
     const blob = new Blob([tab.text], { type: 'text/plain;charset=utf-8' })
     setStatus('保存中...')
@@ -747,6 +1270,87 @@
       renderEditor()
     } catch (e) {
       setStatus('保存失败', 'is-danger')
+      RPT.notify.error(e)
+    }
+  }
+
+  /* 新接口：文件摘要（只在状态栏显示，并复制到剪贴板） */
+  async function copyHash(path) {
+    const target = normalizePath(path)
+
+    if (!capUsable('hash')) {
+      setStatus('当前环境不支持 /hash（后端或 DataServer 未提供）', 'is-danger')
+      return
+    }
+
+    setStatus(`计算摘要 ${target} ...`)
+
+    try {
+      /* 先确认数据存在，避免把“文件不存在”误判成“接口不存在” */
+      if (!(await RPT.apiWorkspace.exists(target))) {
+        setStatus(`文件不存在：${target}`, 'is-danger')
+        return
+      }
+
+      const res = await RPT.apiWorkspace.hash(target)
+      const algo = (res && res.algorithm) || 'sha256'
+      const digest = (res && res.digest) || ''
+      if (!digest) { setStatus('摘要为空', 'is-danger'); return }
+      capMark('hash', true)
+      copyText(digest)
+      setStatus(`${algo} ${digest}`)
+    } catch (e) {
+      if (routeMissing(e)) {
+        capMark('hash', false)
+        setStatus('当前环境不支持 /hash（后端或 DataServer 未提供）', 'is-danger')
+        return
+      }
+      if (statusOf(e) === 404) {
+        setStatus(`文件不存在：${target}`, 'is-danger')
+        return
+      }
+      setStatus('摘要失败', 'is-danger')
+      RPT.notify.error(e)
+    }
+  }
+
+  /* 新接口：目录 / 文件统计 */
+  async function showDiskUsage(path) {
+    const target = path == null ? '' : normalizePath(path)
+
+    if (!capUsable('du')) {
+      setStatus('当前环境不支持 /du（后端或 DataServer 未提供）', 'is-danger')
+      return
+    }
+
+    setStatus(`统计 ${target || '根目录'} ...`)
+
+    try {
+      if (!(await RPT.apiWorkspace.exists(target))) {
+        setStatus(`路径不存在：${target}`, 'is-danger')
+        return
+      }
+
+      const res = await RPT.apiWorkspace.du(target)
+      const size = Number(res && res.size) || 0
+      const files = res && res.files
+      const dirs = res && res.dirs
+      capMark('du', true)
+      setStatus(
+        `${target || '根'} · ${RPT.format.bytes(size)} · ` +
+        `${RPT.format.number(Number(files) || 0)} 个文件 / ${RPT.format.number(Number(dirs) || 0)} 个目录`
+      )
+    } catch (e) {
+      if (routeMissing(e)) {
+        capMark('du', false)
+        setStatus('当前环境不支持 /du（后端或 DataServer 未提供）', 'is-danger')
+        return
+      }
+      if (statusOf(e) === 404) {
+        setStatus(`路径不存在：${target}`, 'is-danger')
+        return
+      }
+      setStatus('统计失败', 'is-danger')
       RPT.notify.error(e)
     }
   }
@@ -1036,17 +1640,31 @@
     await RPT.apiWorkspace.writeFile(target, file, file.name)
   }
 
+  /* 数量到阈值时问一次：继续上传？返回 false 表示用户取消 */
+  async function confirmImportMore() {
+    const done = state.importCount
+    const ok = await RPT.notify.confirm(
+      `已经要上传 ${done} 个文件了，确定继续吗？`,
+      { okText: '继续上传', cancelText: '停止' }
+    )
+    if (!ok) {
+      state.importAborted = true
+      return false
+    }
+    state.importThreshold = done + RPT.cfg('workspaceImportAskStep', 500)
+    return true
+  }
+
   async function importEntry(entry, dir) {
     if (state.importAborted || !entry) return
 
     if (entry.isFile) {
-      state.importCount++
-      if (state.importCount > MAX_IMPORT) {
-        state.importAborted = true
-        RPT.notify.toast(`一次最多导入 ${MAX_IMPORT} 个文件，已停止`, 'warning', 4000)
-        return
+      if (state.importCount >= state.importThreshold) {
+        const go = await confirmImportMore()
+        if (!go) return
       }
 
+      state.importCount++
       setStatus(`导入中 ${state.importCount} 个文件 · ${entry.fullPath || entry.name}`)
       const file = await new Promise((resolve, reject) => entry.file(resolve, reject))
       await writeImportedFile(file, dir)
@@ -1067,6 +1685,7 @@
 
     const targetDir = normalizePath(dir)
     state.importCount = 0
+    state.importThreshold = RPT.cfg('workspaceImportAskAt', 100)
     state.importAborted = false
 
     /* 必须在 drop 事件里同步取 entry，await 之后 items 会被清空 */
@@ -1080,13 +1699,28 @@
 
     try {
       if (entries.length === 0) {
-        /* 不支持 webkitGetAsEntry 时退化为普通文件列表 */
-        for (const file of Array.from(dt.files || [])) {
-          state.importCount++
-          if (state.importCount > MAX_IMPORT) {
-            RPT.notify.toast(`一次最多导入 ${MAX_IMPORT} 个文件，已停止`, 'warning', 4000)
-            break
+        /* 不支持 webkitGetAsEntry 时退化为普通文件列表；数量已知，先问一次 */
+        const files = Array.from(dt.files || [])
+        if (files.length > RPT.cfg('workspaceImportAskAt', 100)) {
+          const ok = await RPT.notify.confirm(
+            `这次要上传 ${files.length} 个文件，确定继续吗？`,
+            { okText: '继续上传', cancelText: '取消' }
+          )
+          if (!ok) {
+            setStatus('已取消上传')
+            return
           }
+          /* 数量已知且刚确认过，后面不用再问 */
+          state.importThreshold = files.length + 1
+        }
+
+        for (const file of files) {
+          if (state.importAborted) break
+          if (state.importCount >= state.importThreshold) {
+            const go = await confirmImportMore()
+            if (!go) break
+          }
+          state.importCount++
           setStatus(`导入中 ${state.importCount} 个文件 · ${file.name}`)
           await writeImportedFile(file, targetDir)
         }
@@ -1099,7 +1733,7 @@
 
       const where = targetDir || '根目录'
       if (state.importAborted) {
-        setStatus(`导入中断 · 已导入 ${state.importCount} 个文件（超过 ${MAX_IMPORT} 上限）`, 'is-danger')
+        setStatus(`导入已停止 · 已上传 ${state.importCount} 个文件 → ${where}`, 'is-danger')
       } else {
         setStatus(`导入完成 · ${state.importCount} 个文件 → ${where}`)
         RPT.notify.toast(`已导入 ${state.importCount} 个文件`, 'success', 3000)
@@ -1125,37 +1759,6 @@
     } catch (e) {
       if (statusOf(e) === 409) return null     // 已存在
       throw e
-    }
-  }
-
-  async function createDirPrompt(dir) {
-    const name = await promptText({
-      title: '新建目录',
-      label: '目录名（可含子路径）',
-      placeholder: dir ? 'sub/dir' : 'docs/new',
-      okText: '创建',
-      hint: '缺失的中间目录会自动创建',
-    })
-    if (!name) return
-
-    const target = joinPath(dir, normalizePath(name))
-    if (!target) return
-
-    try {
-      const created = await createDir(target)
-      if (!created) {
-        RPT.notify.toast('目录已存在', 'warning')
-        return
-      }
-      RPT.notify.toast('已创建目录', 'success')
-      await loadTree()
-      expandTo(created)
-      state.expanded.add(created)
-      state.selected = created
-      renderTree()
-      setStatus(`已创建目录 ${created}`)
-    } catch (e) {
-      RPT.notify.error(e)
     }
   }
 
@@ -1316,42 +1919,6 @@
     }
   }
 
-  async function createFile(dirOpt) {
-    const base = dirOpt != null
-      ? normalizePath(dirOpt)
-      : (state.selected && isDir(state.selected) ? state.selected : '')
-
-    const path = await promptText({
-      title: '新建文件',
-      label: '虚拟路径',
-      value: base ? `${base}/` : '',
-      placeholder: 'docs/a.md',
-      okText: '创建',
-      hint: '不存在的父目录会自动创建',
-    })
-    if (!path) return
-
-    const target = normalizePath(path)
-    if (!target || target.endsWith('/')) {
-      RPT.notify.toast('路径不合法', 'warning')
-      return
-    }
-
-    try {
-      await RPT.apiWorkspace.writeFile(
-        target,
-        new Blob([''], { type: 'text/plain;charset=utf-8' }),
-        baseName(target)
-      )
-      RPT.notify.toast('已创建', 'success')
-      await loadTree()
-      expandTo(target)
-      state.selected = target
-      await openFile(target)
-    } catch (e) {
-      RPT.notify.error(e)
-    }
-  }
 
   /* ============================================================
    * 搜索
@@ -1497,7 +2064,7 @@
 
     const searchRecursive = RPT.dom.el('input', {
       type: 'checkbox',
-      checked: true,
+      checked: RPT.cfg('workspaceSearchRecursive', true),
       dataset: { panel: 'ws-search-recursive' },
     })
 
@@ -1505,24 +2072,51 @@
       div({ class: 'ws-sidebar-header' }, [
         span({ class: 'ws-sidebar-title' }, ['资源管理器']),
         div({ style: { flex: '1' } }),
-        button({ class: 'btn btn-sm btn-ghost', title: '新建文件', onClick: createFile }, ['＋']),
-        button({ class: 'btn btn-sm btn-ghost', title: '上传文件', onClick: () => uploadInput.click() }, ['↑']),
-        button({ class: 'btn btn-sm btn-ghost', title: '刷新', onClick: () => loadTree() }, ['⟳']),
         button({
-          class: 'btn btn-sm btn-ghost',
+          class: 'btn btn-sm btn-ghost btn-icon',
+          title: '新建文件',
+          'aria-label': '新建文件',
+          onClick: () => startInlineCreate('file'),
+        }, [
+          icon('file', 13),
+        ]),
+        button({
+          class: 'btn btn-sm btn-ghost btn-icon',
+          title: '新建目录',
+          'aria-label': '新建目录',
+          onClick: () => startInlineCreate('dir'),
+        }, [
+          icon('folder', 15),
+        ]),
+        button({
+          class: 'btn btn-sm btn-ghost btn-icon',
+          title: '上传文件',
+          'aria-label': '上传文件',
+          onClick: () => uploadInput.click(),
+        }, [icon('upload')]),
+        button({
+          class: 'btn btn-sm btn-ghost btn-icon',
+          title: '刷新',
+          'aria-label': '刷新',
+          onClick: () => loadTree(),
+        }, [icon('refresh')]),
+        button({
+          class: 'btn btn-sm btn-ghost btn-icon',
           title: '全部折叠',
+          'aria-label': '全部折叠',
           onClick: () => { state.expanded = new Set(['']); renderTree() },
-        }, ['⌄']),
+        }, [icon('collapse')]),
         uploadInput,
       ]),
       div({ class: 'ws-search-row' }, [
         searchInput,
         RPT.dom.label({ class: 'checkbox-row ws-search-rec' }, [searchRecursive, span({}, ['递归'])]),
         button({
-          class: 'btn btn-sm btn-ghost',
+          class: 'btn btn-sm btn-ghost btn-icon',
           title: '清除搜索',
+          'aria-label': '清除搜索',
           onClick: clearSearch,
-        }, ['×']),
+        }, [icon('close')]),
       ]),
       div({
         class: 'ws-tree',
@@ -1581,20 +2175,37 @@
           RPT.notify.error(err)
         }
       },
-    }, ENCODINGS.map((enc) => RPT.dom.el('option', { value: enc }, [enc])))
+    }, ENCODINGS.map((enc) => RPT.dom.el('option', {
+      value: enc,
+      selected: enc === state.encoding,
+    }, [enc])))
 
     const toolbar = div({ class: 'ws-editor-toolbar', dataset: { panel: 'ws-editor-toolbar' } }, [
       div({ class: 'ws-crumbs', dataset: { panel: 'ws-crumbs' } }),
       div({ style: { flex: '1' } }),
       div({ class: 'ws-editor-meta', dataset: { panel: 'ws-editor-meta' } }),
-      span({ class: 'form-label' }, ['编码']),
+      span({ class: 'form-label', dataset: { panel: 'ws-enc-label' } }, ['编码']),
       encodingSelect,
-      button({ class: 'btn btn-sm', title: '重新读取', onClick: () => {
+      button({
+        class: 'btn btn-sm',
+        title: '重新读取',
+        dataset: { panel: 'ws-reload' },
+        onClick: () => {
+          const tab = activeTab()
+          if (tab) openFileAfterReload(tab.path)
+        },
+      }, ['重读']),
+      button({ class: 'btn btn-sm', title: '在新标签页打开（直接读取链接）', onClick: () => {
         const tab = activeTab()
-        if (tab) openFileAfterReload(tab.path)
-      } }, ['重读']),
+        if (tab) openInNewTab(tab.path)
+      } }, [icon('external', 13), '新标签页']),
       button({ class: 'btn btn-sm', title: '下载', onClick: () => downloadFile() }, ['下载']),
-      button({ class: 'btn btn-sm btn-primary', title: '保存 (Ctrl+S)', onClick: saveActive }, ['保存']),
+      button({
+        class: 'btn btn-sm btn-primary',
+        title: '保存 (Ctrl+S)',
+        dataset: { panel: 'ws-save' },
+        onClick: saveActive,
+      }, ['保存']),
     ])
     toolbar.style.display = 'none'
 
@@ -1612,14 +2223,20 @@
       onKeydown: onEditorKeydown,
     })
 
+    const preview = div({
+      class: 'ws-preview',
+      dataset: { panel: 'ws-preview' },
+      style: { display: 'none' },
+    })
+
     const empty = div({ class: 'ws-empty', dataset: { panel: 'ws-empty' } }, [
       div({ class: 'ws-empty-title' }, ['从左侧选择一个文件开始编辑']),
       div({ class: 'ws-empty-hints text-dim text-xs' }, [
-        '单击文件打开 · ↑↓ 移动 · Enter 打开 · F2 重命名 · Delete 删除 · Ctrl+S 保存',
+        '单击文件打开 · 图片/视频/音频直接预览 · ↑↓ 移动 · Enter 打开 · F2 重命名 · Delete 删除 · Ctrl+S 保存',
       ]),
     ])
 
-    const editorArea = div({ class: 'ws-editor-area' }, [tabsBar, toolbar, editor, empty])
+    const editorArea = div({ class: 'ws-editor-area' }, [tabsBar, toolbar, editor, preview, empty])
 
     /* ---------- 底部状态栏 ---------- */
     const statusBar = div({ class: 'ws-statusbar' }, [
@@ -1662,6 +2279,10 @@
   async function openFileAfterReload(path) {
     const tab = findTab(path)
     if (!tab) return
+    if ((tab.kind || 'text') !== 'text') {
+      setStatus('非文本文件不需要重读')
+      return
+    }
     if (tab.dirty) {
       const ok = await RPT.notify.confirm('重新读取会丢弃当前修改，继续？')
       if (!ok) return
@@ -1709,6 +2330,22 @@
     if (state.selected != null && isDir(state.selected)) return state.selected
     return ''
   }
+
+  /* 设置改动：默认编码 / 递归搜索立即同步到界面；导入阈值每次使用时现读，无需同步 */
+  RPT.settings.onChange((key, value) => {
+    if (key === 'workspaceEncoding') {
+      state.encoding = value
+      const select = q('ws-encoding')
+      if (select) select.value = value
+      return
+    }
+
+    if (key === 'workspaceSearchRecursive') {
+      state.search.recursive = !!value
+      const box = q('ws-search-recursive')
+      if (box) box.checked = !!value
+    }
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/workspace.html')

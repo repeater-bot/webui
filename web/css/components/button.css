@@ -81,4 +81,45 @@
     border-color: var(--border-hover);
     color: var(--text);
   }
+
+  /* ---------- 图标按钮（只放 svg，无文字） ---------- */
+  .btn-icon {
+    padding: 4px 7px;
+    color: var(--text-dim);
+    gap: 0;
+  }
+
+  .btn-icon svg { display: block; }
+
+  .btn-icon:hover { color: var(--accent-hover); }
+
+  /* 行内图标（跟在文字前面） */
+  .icon-inline {
+    display: inline-block;
+    vertical-align: -2px;
+    margin-right: 4px;
+  }
+
+  /* ---------- 状态圆点 ---------- */
+  .status-dot {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    margin-right: 5px;
+    background: currentColor;
+    border-radius: 50%;
+    vertical-align: 1px;
+  }
+
+  .status-dot.is-off {
+    background: transparent;
+    box-shadow: inset 0 0 0 1px currentColor;
+  }
+
+  .status-dot.is-live { animation: status-pulse 1.4s ease-in-out infinite; }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+  }
 }

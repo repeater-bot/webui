@@ -197,7 +197,7 @@
         class: 'sidebar-add-btn',
         title: '新建分组',
         onClick: () => openCreateGroupDialog(),
-      }, ['+ 分组']),
+      }, [RPT.dom.svgIcon('plus', 12), span({ class: 'sidebar-add-label' }, ['分组'])]),
       button({
         class: 'sidebar-add-btn sidebar-reset-btn',
         title: '重置侧栏布局',
@@ -245,7 +245,7 @@
         e.stopPropagation()
         openDeleteGroupDialog(group.id)
       },
-    }, ['×'])
+    }, [RPT.dom.svgIcon('close', 10)])
 
     const header = div({
       class: 'sidebar-group-header',

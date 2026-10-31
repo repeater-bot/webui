@@ -29,7 +29,7 @@
     systemFailed: false,
     systemError: '',
     auto: true,
-    interval: 2000,
+    interval: RPT.cfg('perfIntervalMs', 2000),
     allPartitions: false,
     timer: null,
     loading: false,
@@ -69,8 +69,8 @@
 
   function levelClass(v) {
     const n = num(v)
-    if (n >= 85) return 'is-danger'
-    if (n >= 60) return 'is-warning'
+    if (n >= RPT.cfg('perfDangerPercent', 85)) return 'is-danger'
+    if (n >= RPT.cfg('perfWarnPercent', 60)) return 'is-warning'
     return 'is-ok'
   }
 
@@ -187,8 +187,8 @@
     ))
     box.appendChild(card(
       '网络累计',
-      `↑ ${RPT.format.bytes(sent)}`,
-      `↓ ${RPT.format.bytes(recv)} · ${nicList.length} 个网卡`
+      [RPT.dom.svgIcon('arrow-up', 13), ` ${RPT.format.bytes(sent)}`],
+      [RPT.dom.svgIcon('arrow-down', 13), ` ${RPT.format.bytes(recv)} · ${nicList.length} 个网卡`]
     ))
   }
 
@@ -304,7 +304,8 @@
       return
     }
 
-    const LIMIT = 300
+    /* 连接表最多渲染多少行，来自设置页 */
+    const LIMIT = RPT.cfg('perfConnectionLimit', 300)
     const rows = all.slice(0, LIMIT)
 
     body.appendChild(div({ class: 'pm-table pm-table-conn' }, [
@@ -467,7 +468,7 @@
 
     try {
       const [cpu, memory, disk, network] = await Promise.all([
-        RPT.apiPerfMonitor.cpu(0.1, true),
+        RPT.apiPerfMonitor.cpu(RPT.cfg('perfCpuSampleSec', 0.1), true),
         RPT.apiPerfMonitor.memory(),
         RPT.apiPerfMonitor.disk(state.allPartitions),
         RPT.apiPerfMonitor.network(),
@@ -528,13 +529,18 @@
       onClick: () => setAuto(!state.auto),
     }, [state.auto ? '自动刷新：开' : '自动刷新：关']))
 
+    /* 预设间隔；设置页里填了非预设值时补进候选，保证下拉框能显示当前值 */
+    const intervalChoices = [1000, 2000, 5000, 10000]
+    if (intervalChoices.indexOf(state.interval) < 0) intervalChoices.push(state.interval)
+    intervalChoices.sort((a, b) => a - b)
+
     const intervalSelect = RPT.dom.el('select', {
       class: 'select pm-interval',
       onChange: (e) => {
         state.interval = Number(e.target.value)
         if (state.auto) startTimer()
       },
-    }, [1000, 2000, 5000, 10000].map((ms) => RPT.dom.el('option', {
+    }, intervalChoices.map((ms) => RPT.dom.el('option', {
       value: String(ms),
       selected: ms === state.interval,
     }, [`${ms / 1000}s`])))
@@ -595,6 +601,22 @@
     refresh()
     startTimer()
   }
+
+  /* 设置改动：刷新间隔 / 连接行数上限 / 高低负载阈值立即生效 */
+  RPT.settings.onChange((key, value) => {
+    if (!document.querySelector('.pm-main')) return
+
+    if (key === 'perfIntervalMs') {
+      state.interval = value
+      if (state.auto) startTimer()
+      renderToolbar()
+      return
+    }
+
+    if (key === 'perfConnectionLimit' || key === 'perfWarnPercent' || key === 'perfDangerPercent') {
+      renderAll()
+    }
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/perf-monitor.html')

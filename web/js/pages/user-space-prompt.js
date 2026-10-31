@@ -149,8 +149,9 @@
       onInput: (e) => { state.prompt = e.target.value; state.dirty = true; updateDirty() },
     }, [state.prompt])
 
-    const dirtyFlag = span({ class: 'text-warning text-xs' }, [''])
-    function updateDirty() { dirtyFlag.textContent = state.dirty ? '● 未保存' : '' }
+    const dirtyFlag = span({ class: 'text-warning text-xs' }, [span({ class: 'status-dot' }), '未保存'])
+    dirtyFlag.style.display = 'none'
+    function updateDirty() { dirtyFlag.style.display = state.dirty ? '' : 'none' }
 
     const previewNode = div({ class: 'markdown-body prompt-preview-body' })
     const text = state.rendered || state.prompt

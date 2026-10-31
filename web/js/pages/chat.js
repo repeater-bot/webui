@@ -2,8 +2,8 @@
  * Chat 页面
  * - 流式对话（NDJSON）
  * - reasoning 折叠 / content markdown / tool_calls 时间线
- * - Core Task Status 轮询（1s）
- * - Buffer 轮询（1.5s）
+ * - Core Task Status 轮询（间隔见设置页 chatStatusIntervalMs，默认 1s）
+ * - Buffer 轮询（间隔见设置页 chatBufferIntervalMs，默认 1.5s）
  * - 中断（abort + break API）
  */
 
@@ -96,7 +96,7 @@
     const head = div({ class: 'chat-msg-head' }, [
       span({ class: ['chat-msg-role', unit.role] }, [unit.role]),
       unit.roleName ? span({}, [unit.roleName]) : null,
-      unit.streaming ? span({ class: 'text-accent' }, ['● 生成中']) : null,
+      unit.streaming ? span({ class: 'text-accent' }, [span({ class: 'status-dot is-live' }), '生成中']) : null,
     ])
     msg.appendChild(head)
 
@@ -318,7 +318,7 @@
       } catch { /* 静默 */ }
     }
     tick()
-    state.statusTimer = setInterval(tick, 1000)
+    state.statusTimer = setInterval(tick, RPT.cfg('chatStatusIntervalMs', 1000))
   }
 
   function stopStatusPolling() {
@@ -365,7 +365,7 @@
       } catch { /* 静默 */ }
     }
     tick()
-    state.bufferTimer = setInterval(tick, 1500)
+    state.bufferTimer = setInterval(tick, RPT.cfg('chatBufferIntervalMs', 1500))
   }
 
   function stopBufferPolling() {
@@ -504,6 +504,13 @@
 
     renderMessages(messagesEl)
   }
+
+  /* 设置里改了轮询间隔：正在生成时立即按新间隔重启两个轮询 */
+  RPT.settings.onChange((key) => {
+    if (!state.isGenerating) return
+    if (key === 'chatStatusIntervalMs') startStatusPolling()
+    else if (key === 'chatBufferIntervalMs') startBufferPolling()
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/generate/chat.html')

@@ -380,3 +380,10 @@
     .pm-kv { grid-template-columns: 110px 1fr; }
   }
 }
+
+  /* 卡片里的行内图标 */
+  .pm-card-value svg,
+  .pm-card-sub svg {
+    vertical-align: -1px;
+    margin-right: 2px;
+  }

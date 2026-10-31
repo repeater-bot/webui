@@ -31,8 +31,18 @@
     { title: '设置',     desc: 'Admin Key / 后端地址',               href: '/web/settings.html' },
   ]
 
-  /* 运行时长磁贴的自动刷新间隔（ms） */
-  const UPTIME_INTERVAL = 5000
+  /* 运行时长磁贴的自动刷新间隔（ms），来自设置页 */
+  let uptimeTimer = null
+  let uptimeTileEl = null
+
+  function startUptimeTimer(tileEl) {
+    if (uptimeTimer) clearInterval(uptimeTimer)
+    uptimeTileEl = tileEl
+    uptimeTimer = setInterval(
+      () => loadUptime(tileEl),
+      RPT.cfg('dashboardUptimeIntervalMs', 5000)
+    )
+  }
 
   /* ---------- 状态磁贴：先渲染占位，数据回来再更新 ---------- */
   function createStatusTiles() {
@@ -171,8 +181,13 @@
     loadVersion(versionTile)
     loadAlived(alivedTile)
     loadUptime(uptimeTile)
-    setInterval(() => loadUptime(uptimeTile), UPTIME_INTERVAL)
+    startUptimeTimer(uptimeTile)
   }
+
+  /* 设置里改了间隔：立即按新间隔重新定时 */
+  RPT.settings.onChange((key) => {
+    if (key === 'dashboardUptimeIntervalMs' && uptimeTileEl) startUptimeTimer(uptimeTileEl)
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/index.html')

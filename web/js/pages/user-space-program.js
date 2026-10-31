@@ -202,7 +202,7 @@
                   if (b !== state.currentBranch) switchBranch(b)
                 },
               }, [
-                span({ class: 'ctx-item-role' }, [b === state.currentBranch ? '●' : '○']),
+                span({ class: 'ctx-item-role' }, [span({ class: ['status-dot', b === state.currentBranch ? '' : 'is-off'] })]),
                 span({ class: 'ctx-item-summary', style: { fontFamily: 'var(--font-mono)' } }, [b]),
               ])
             )

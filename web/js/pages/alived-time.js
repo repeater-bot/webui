@@ -1,15 +1,13 @@
 /*
  * 运行时长
  * - 轮询 /alived/time 与 /s /ms /us /ns
- * - 1 秒自动刷新，可暂停
+ * - 自动刷新（间隔见设置页「运行时长采样间隔」，默认 1 秒），可暂停
  */
 
 (function () {
   'use strict'
 
   const { div, span, button } = RPT.dom
-
-  const REFRESH_INTERVAL = 1000
 
   const state = {
     autoRefresh: true,
@@ -68,7 +66,7 @@
 
   function startTimer() {
     stopTimer()
-    state.timer = setInterval(refresh, REFRESH_INTERVAL)
+    state.timer = setInterval(refresh, RPT.cfg('alivedTimeIntervalMs', 1000))
   }
 
   function stopTimer() {
@@ -138,7 +136,9 @@
 
     el.appendChild(button({ class: 'btn btn-sm', onClick: refresh }, ['立即刷新']))
 
-    el.appendChild(span({ class: 'text-dim text-xs' }, ['采样间隔 1s']))
+    el.appendChild(span({ class: 'text-dim text-xs' }, [
+      `采样间隔 ${RPT.cfg('alivedTimeIntervalMs', 1000) / 1000}s`,
+    ]))
 
     el.appendChild(div({ class: 'observe-spacer' }))
 
@@ -180,6 +180,13 @@
     refresh()
     startTimer()
   }
+
+  /* 设置里改了采样间隔：自动刷新开着时立即重启定时器并更新工具栏文字 */
+  RPT.settings.onChange((key) => {
+    if (key !== 'alivedTimeIntervalMs') return
+    if (state.autoRefresh && state.timer) startTimer()
+    renderToolbar()
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/alived-time.html')

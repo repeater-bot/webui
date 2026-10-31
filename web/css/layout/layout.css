@@ -125,6 +125,10 @@
 
   .sidebar-add-btn {
     flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
     padding: 6px 10px;
     font-size: var(--fs-xs);
     color: var(--text-dim);
@@ -135,6 +139,8 @@
     transition: all var(--transition);
     font-family: inherit;
   }
+
+  .sidebar-add-btn svg { display: block; }
 
   .sidebar-add-btn:hover {
     border-color: var(--accent);

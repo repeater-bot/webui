@@ -16,13 +16,17 @@
    * ============================================================ */
 
   const state = {
-    buffer: new RPT.LogBuffer({ windowSize: 100, maxNodes: 2000 }),
+    buffer: new RPT.LogBuffer({
+      windowSize: RPT.cfg('requestLogWindowSize', 100),
+      maxNodes: RPT.cfg('requestLogMaxNodes', 2000),
+    }),
     totalRead: 0,
     running: false,
     aborter: null,
     chart: null,
     dimension: 'tokens',   // tokens | cache | duration | throughput
     tickTimer: null,
+    distTimer: null,
   }
 
   const DIMENSIONS = [
@@ -103,7 +107,24 @@
       if (dirty.summary) renderSummary()
       if (dirty.nodes)   renderChart()
       updateToolbar()
-    }, 200)
+    }, RPT.cfg('requestLogTickMs', 200))
+  }
+
+  /* 设置里改了节流间隔：清掉旧定时器按新间隔重开 */
+  function restartTick() {
+    if (!state.tickTimer) return
+    clearInterval(state.tickTimer)
+    state.tickTimer = null
+    startTick()
+  }
+
+  /* 分布表定时刷新（间隔见设置页「分布表刷新间隔」） */
+  function startDistTimer() {
+    if (state.distTimer) clearInterval(state.distTimer)
+    state.distTimer = setInterval(
+      renderDistributions,
+      RPT.cfg('requestLogDistIntervalMs', 800)
+    )
   }
 
   /* ============================================================
@@ -221,7 +242,7 @@
             ticks: {
               maxRotation: 0,
               autoSkip: true,
-              maxTicksLimit: 10,
+              maxTicksLimit: RPT.cfg('requestLogMaxTicks', 10),
               color: '#6b7a8f',
               font: { size: 10 },
               callback: function (value) {
@@ -275,7 +296,7 @@
 
     const sorted = entries
       .sort((a, b) => weight(b[1]) - weight(a[1]))
-      .slice(0, 20)
+      .slice(0, RPT.cfg('requestLogTopN', 20))
 
     if (sorted.length === 0) {
       body.appendChild(div({ class: 'empty' }, ['—']))
@@ -404,10 +425,16 @@
     render()
     startTick()
 
-    /* 每 800ms 刷新一次分布表（比图表稍慢，减负） */
-    setInterval(renderDistributions, 800)
+    /* 分布表按设置里的间隔刷新（默认比图表稍慢，减负） */
+    startDistTimer()
 
     /* 进页面就自动开始 */
     startReading()
+  })
+
+  /* 设置改动：节流 / 分布表间隔立即生效 */
+  RPT.settings.onChange((key) => {
+    if (key === 'requestLogTickMs') restartTick()
+    else if (key === 'requestLogDistIntervalMs') startDistTimer()
   })
 })()

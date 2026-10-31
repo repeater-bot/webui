@@ -157,8 +157,9 @@
       onInput: (e) => { state.json = e.target.value; state.dirty = true; updateDirty() },
     }, [state.json])
 
-    const dirtyFlag = span({ class: 'text-warning text-xs' }, [''])
-    function updateDirty() { dirtyFlag.textContent = state.dirty ? '● 未保存' : '' }
+    const dirtyFlag = span({ class: 'text-warning text-xs' }, [span({ class: 'status-dot' }), '未保存'])
+    dirtyFlag.style.display = 'none'
+    function updateDirty() { dirtyFlag.style.display = state.dirty ? '' : 'none' }
 
     const fieldCount = Object.keys(state.config).length
 

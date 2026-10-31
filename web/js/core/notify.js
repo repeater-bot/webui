@@ -1,6 +1,6 @@
 /*
  * 通知：toast / error / confirm
- * toast 在右上角浮出，2s 自动消失
+ * toast 在右上角浮出，停留时长由 RPT.settings 的 toastDurationMs / toastErrorDurationMs 控制
  * error 若带 traceback 则弹窗，否则 toast
  */
 
@@ -19,7 +19,7 @@
     return container
   }
 
-  function toast(msg, type = 'info', durationMs = 2000) {
+  function toast(msg, type = 'info', durationMs = RPT.cfg('toastDurationMs', 2000)) {
     const c = ensureContainer()
     const el = div({ class: ['toast', `is-${type}`] }, [String(msg)])
     c.appendChild(el)
@@ -34,7 +34,7 @@
     const box = div({ class: 'modal' }, [
       div({ class: 'modal-header' }, [
         span({}, [title]),
-        button({ class: 'btn btn-sm btn-ghost', onClick: close }, ['×']),
+        button({ class: 'btn btn-sm btn-ghost', onClick: close, title: '关闭' }, [RPT.dom.svgIcon('close', 12)]),
       ]),
       div({ class: 'modal-body' }, body),
       footer ? div({ class: 'modal-footer' }, footer) : null,
@@ -85,17 +85,19 @@
       return
     }
 
-    toast((err && err.message) || String(err), 'danger', 3500)
+    toast((err && err.message) || String(err), 'danger', RPT.cfg('toastErrorDurationMs', 3500))
   }
 
-  function confirm(msg) {
+  /* confirm(msg) 或 confirm(msg, { title, okText, cancelText }) */
+  function confirm(msg, opts = {}) {
+    const { title = '确认', okText = '确定', cancelText = '取消' } = opts
     return new Promise((resolve) => {
       const m = modal({
-        title: '确认',
+        title,
         body: [div({ class: 'text-sm' }, [String(msg)])],
         footer: [
-          button({ class: 'btn', onClick: () => { m.close(); resolve(false) } }, ['取消']),
-          button({ class: 'btn btn-primary', onClick: () => { m.close(); resolve(true) } }, ['确定']),
+          button({ class: 'btn', onClick: () => { m.close(); resolve(false) } }, [cancelText]),
+          button({ class: 'btn btn-primary', onClick: () => { m.close(); resolve(true) } }, [okText]),
         ],
       })
     })

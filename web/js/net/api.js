@@ -102,6 +102,9 @@
       raw(path, { ...opts, method: 'POST', body, as: 'blob' }),
     getBlob: (path, opts) =>
       raw(path, { ...opts, method: 'GET', as: 'blob' }),
+
+    /* 拼出可直接放进 <a href> / window.open 的完整地址 */
+    url: buildUrl,
   }
 
   RPT.api = api

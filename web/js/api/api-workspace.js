@@ -50,13 +50,32 @@
 
     exists:   (path) => RPT.api.get(`${base}/exists/${enc(path)}`),
 
+    isFile:   (path) => RPT.api.get(`${base}/is_file/${enc(path)}`),
+    isDir:    (path) => RPT.api.get(`${base}/is_dir/${enc(path)}`),
+
     getInfo:  (path) => RPT.api.get(`${base}/get_info/${enc(path)}`),
+
+    /* 嵌套树：{ path, type: 'file' | 'directory', size?, children? } */
+    tree:     (path, maxDepth = -1) => RPT.api.get(
+      `${base}/tree/${enc(path)}${q({ max_depth: maxDepth })}`
+    ),
+
+    /* 统计：{ path, size, files, dirs } */
+    du:       (path) => RPT.api.get(`${base}/du/${enc(path)}`),
+
+    /* 摘要：{ algorithm, digest, size } */
+    hash:     (path, algorithm = 'sha256') => RPT.api.get(
+      `${base}/hash/${enc(path)}${q({ algorithm })}`
+    ),
 
     getText:  (path, textEncoding) => RPT.api.get(
       `${base}/get_text/${enc(path)}${q({ text_encoding: textEncoding })}`
     ),
 
     getFile:  (path) => RPT.api.getBlob(`${base}/get_file/${enc(path)}`),
+
+    /* 原始读取地址：可直接 window.open，或塞进 <img src> / <video src> */
+    rawUrl:   (path) => RPT.api.url(`${base}/get_file/${enc(path)}`),
 
     /* multipart/form-data：字段名固定为 file，返回写入字节数 */
     writeFile: (path, blob, filename) => {
@@ -67,6 +86,34 @@
         body: form,
       })
     },
+
+    /* 创建空文件 / 刷新 mtime，返回文件大小；不传 body */
+    touch: (path) => RPT.api.raw(`${base}/touch/${enc(path)}`, { method: 'POST' }),
+
+    /* 追加原始字节，返回追加后大小 */
+    append: (path, bytes) => RPT.api.raw(`${base}/append/${enc(path)}`, {
+      method: 'POST',
+      body: bytes,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    }),
+
+    /* 调整文件大小到 size 字节，返回新大小 */
+    truncate: (path, size) => RPT.api.raw(
+      `${base}/truncate/${enc(path)}${q({ size })}`,
+      { method: 'POST' }
+    ),
+
+    /* 用 Base64 内容替换 [start, end) 字节区间，返回新大小 */
+    edit: (path, start, end, base64Data) => RPT.api.post(
+      `${base}/edit/${enc(path)}`,
+      { start, end, data: base64Data }
+    ),
+
+    /* 把 [start, end) 字节区间复制成新文件 */
+    copyRange: (path, destination, start, end) => RPT.api.post(
+      `${base}/copy_range/${enc(path)}`,
+      { destination: stripLeading(destination), start, end }
+    ),
 
     /* 无 body，返回规范化后的目录路径（字符串）；已存在时 409 */
     mkdir: (path) => RPT.api.raw(`${base}/mkdir/${enc(path)}`, { method: 'POST' }),

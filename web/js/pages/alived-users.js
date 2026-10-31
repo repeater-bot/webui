@@ -1,6 +1,6 @@
 /*
  * 活跃用户
- * - 3 秒自动刷新
+ * - 自动刷新（间隔见设置页「活跃用户刷新间隔」，默认 3 秒）
  * - 可暂停
  */
 
@@ -8,8 +8,6 @@
   'use strict'
 
   const { div, span, button } = RPT.dom
-
-  const REFRESH_INTERVAL = 3000
 
   const state = {
     autoRefresh: true,
@@ -42,7 +40,7 @@
 
   function startTimer() {
     stopTimer()
-    state.timer = setInterval(refresh, REFRESH_INTERVAL)
+    state.timer = setInterval(refresh, RPT.cfg('alivedUsersIntervalMs', 3000))
   }
 
   function stopTimer() {
@@ -133,6 +131,12 @@
     refresh()
     startTimer()
   }
+
+  /* 设置里改了刷新间隔：自动刷新开着时立即重启定时器 */
+  RPT.settings.onChange((key) => {
+    if (key !== 'alivedUsersIntervalMs') return
+    if (state.autoRefresh && state.timer) startTimer()
+  })
 
   document.addEventListener('DOMContentLoaded', () => {
     RPT.layout.mount('/web/alived-users.html')

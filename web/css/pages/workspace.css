@@ -75,6 +75,30 @@
     line-height: 1;
   }
 
+
+
+  /* 内联新建输入行 */
+  .ws-node.ws-inline {
+    background: var(--accent-light);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+
+  .ws-inline-input {
+    flex: 1;
+    min-width: 0;
+    height: 19px;
+    margin-right: 6px;
+    padding: 0 4px;
+    background: var(--bg-panel);
+    border: 1px solid var(--accent);
+    outline: none;
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    color: var(--text);
+  }
+
+  .ws-inline-input:focus { border-color: var(--accent-hover); }
+
   .ws-search-row {
     flex-shrink: 0;
     display: flex;
@@ -139,17 +163,19 @@
   }
 
   /* 被剪切的条目：变暗 */
-  .ws-node.is-cut .ws-node-name,
-  .ws-node.is-cut .ws-icon { opacity: 0.45; }
+  .ws-node.is-cut .ws-node-name { opacity: 0.45; }
 
   .ws-caret {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 12px;
-    text-align: center;
-    font-size: 10px;
-    line-height: 1;
+    height: 12px;
     color: var(--text-dim);
   }
+
+  .ws-caret svg { display: block; }
 
   .ws-node:hover .ws-caret { color: var(--text); }
 
@@ -160,49 +186,11 @@
     color: var(--text);
   }
 
-  /* 图标：边框画的文件夹 / 文件 */
-  .ws-icon {
-    position: relative;
-    flex: none;
-    display: inline-block;
-    width: 13px;
-    height: 10px;
-    border: 1px solid var(--text-dim);
-  }
+  /* 文件 / 文件夹图标走 RPT.dom.svgIcon（SVG） */
+  .ws-node svg,
+  .ws-tab svg { flex: none; }
 
-  .ws-icon.is-folder {
-    background: var(--accent-light);
-    border-color: var(--border-hover);
-  }
-
-  .ws-icon.is-folder::before {
-    content: '';
-    position: absolute;
-    left: -1px;
-    top: -4px;
-    width: 6px;
-    height: 3px;
-    border: 1px solid var(--border-hover);
-    border-bottom: none;
-    background: var(--accent-light);
-  }
-
-  .ws-icon.is-file {
-    background: var(--bg-panel);
-    border-color: var(--text-dim);
-  }
-
-  .ws-icon.is-file::after {
-    content: '';
-    position: absolute;
-    right: -1px;
-    top: -1px;
-    width: 4px;
-    height: 4px;
-    border-left: 1px solid var(--text-dim);
-    border-bottom: 1px solid var(--text-dim);
-    background: var(--bg-panel);
-  }
+  .ws-node.is-cut svg { opacity: 0.45; }
 
   /* ============================================================
    * 右键菜单
@@ -311,14 +299,17 @@
 
   .ws-tab-close {
     flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 16px;
     height: 16px;
-    line-height: 14px;
-    text-align: center;
     border-radius: 0;
     color: var(--text-dim);
     opacity: 0;
   }
+
+  .ws-tab-close svg { display: block; }
 
   .ws-tab:hover .ws-tab-close,
   .ws-tab.active .ws-tab-close { opacity: 1; }
@@ -333,12 +324,31 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: var(--gap-sm);
     padding: 5px var(--gap);
     border-bottom: 1px solid var(--border);
     background: var(--bg-panel);
+    overflow: hidden;
   }
+
+  .ws-editor-toolbar .ws-crumbs {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .ws-editor-toolbar .ws-editor-meta {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .ws-editor-toolbar .btn { flex: none; }
+
+  .ws-editor-toolbar .ws-meta-item { white-space: nowrap; }
+  .ws-editor-toolbar .ws-crumb { white-space: nowrap; }
 
   .ws-editor-toolbar .form-label {
     color: var(--text-dim);
@@ -407,6 +417,67 @@
   }
 
   .ws-editor:focus { outline: none; }
+
+  /* ---------- 二进制预览（图片 / 视频 / 音频 / PDF） ---------- */
+  .ws-preview {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--gap);
+    overflow: auto;
+    background: var(--bg);
+  }
+
+  .ws-preview-stage {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+  }
+
+  .ws-preview-media {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    background: transparent;
+  }
+
+  img.ws-preview-media { cursor: zoom-in; }
+
+  audio.ws-preview-media { width: min(560px, 90%); }
+
+  .ws-preview-pdf {
+    width: 100%;
+    height: 100%;
+    border: 1px solid var(--border);
+    background: var(--bg-panel);
+  }
+
+  .ws-preview-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: var(--gap-lg);
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  .ws-preview-title {
+    font-size: var(--fs-base);
+    color: var(--text);
+    word-break: break-all;
+  }
+
+  .ws-preview-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
 
   /* 空态 */
   .ws-empty {

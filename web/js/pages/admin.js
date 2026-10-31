@@ -139,7 +139,7 @@
         method: 'POST', path: '/admin/admin_key/regenerate',
         title: '重新生成 Admin Key',
         variant: 'warning',
-        desc: '生成新的 Admin Key 并返回明文。⚠️ 新 Key 不持久化，服务重启后会回退到环境变量中的 Key。',
+        desc: '生成新的 Admin Key 并返回明文。注意：新 Key 不持久化，服务重启后会回退到环境变量中的 Key。',
         actions: [
           button({
             class: 'btn btn-danger',
@@ -207,7 +207,7 @@
       method: 'POST', path: '/admin/debug/crash',
       title: '强制崩溃服务器',
       variant: 'danger',
-      desc: '抛出 CriticalException，触发全局异常处理器关闭服务器。⚠️ 此操作会中断服务，可能导致部分资源未被正确释放。',
+      desc: '抛出 CriticalException，触发全局异常处理器关闭服务器。注意：此操作会中断服务，可能导致部分资源未被正确释放。',
       actions: [
         button({
           class: 'btn btn-danger',
@@ -414,7 +414,7 @@
 
     const key = RPT.storage.get(RPT.storage.keys.ADMIN_KEY, '')
     const warning = div({ class: 'admin-warning' }, [
-      span({ class: 'admin-warning-title' }, ['⚠ 管理员区域']),
+      span({ class: 'admin-warning-title' }, [RPT.dom.svgIcon('warning', 14), span({}, ['管理员区域'])]),
       span({}, key
         ? '所有请求都会携带 Admin Key。请仅在可信环境下使用。'
         : '尚未设置 Admin Key。请前往 设置 页面填写，否则所有请求将返回 401。'),

@@ -11,6 +11,7 @@
     ADMIN_KEY:       'repeater.adminKey',
     CURRENT_USER_ID: 'repeater.currentUserId',
     DEVELOPER_MODE:  'repeater.developerMode',
+    SETTINGS:        'repeater.settings',
   }
 
   const storage = {

@@ -61,13 +61,19 @@
       style: { minWidth: '180px' },
     })
 
+    /* 数量上限来自设置页「单次生成数量上限」 */
+    const maxCount = RPT.cfg('imageMaxCount', 10)
+
     const nInput = input({
       class: 'input',
       type: 'number',
       min: '1',
-      max: '10',
+      max: String(maxCount),
       value: String(state.n),
-      onInput: (e) => { state.n = Math.max(1, parseInt(e.target.value) || 1) },
+      onInput: (e) => {
+        const max = RPT.cfg('imageMaxCount', 10)
+        state.n = Math.min(max, Math.max(1, parseInt(e.target.value) || 1))
+      },
     })
 
     const streamCheck = RPT.dom.el('input', {

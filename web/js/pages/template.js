@@ -143,7 +143,7 @@
     const drawer = div({ class: 'tool-drawer' }, [
       div({ class: 'tool-drawer-header' }, [
         span({}, ['变量与函数']),
-        button({ class: 'btn btn-sm btn-ghost', onClick: () => mask.remove() }, ['×']),
+        button({ class: 'btn btn-sm btn-ghost', onClick: () => mask.remove(), title: '关闭' }, [RPT.dom.svgIcon('close', 12)]),
       ]),
       div({ class: 'tool-drawer-body' }, [
         div({ class: 'tool-drawer-section' }, [
