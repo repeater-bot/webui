@@ -1,6 +1,6 @@
 /*
  * Context 子页面
- * 完整实现：分支管理、对话列表、详情、注入 / 重写 / 撤回 / 角色映射
+ * 完整实现：分支管理、对话列表、详情（展示全部字段）、注入 / 重写 / 撤回 / 角色映射
  */
 
 (function () {
@@ -19,20 +19,94 @@
     selectedIndex: null,
   }
 
+  /* 列表 / 详情容器的引用：切换选中项时只重建详情，列表保持滚动位置 */
+  let listBodyEl = null
+  let detailBodyEl = null
+
+  /* 字段展示顺序与中文说明 */
+  const FIELD_LABELS = {
+    role: 'role（角色）',
+    role_name: 'role_name（角色名）',
+    prefix: 'prefix（前缀续写）',
+    created: 'created（创建时间）',
+    reasoning_content: 'reasoning_content（思维链）',
+    tool_calls: 'tool_calls（工具调用）',
+    tool_call_id: 'tool_call_id（调用 ID）',
+    content: 'content（内容）',
+  }
+
   /* ---------- 工具 ---------- */
   function currentUserId() {
     return RPT.storage.get(RPT.storage.keys.CURRENT_USER_ID, '')
   }
 
+  function isObject(v) {
+    return v !== null && typeof v === 'object'
+  }
+
+  function jsonOf(value) {
+    try { return JSON.stringify(value, null, 2) } catch { return String(value) }
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text)
+        .then(() => RPT.notify.toast('已复制', 'success'))
+        .catch(() => RPT.notify.toast('复制失败', 'danger'))
+      return
+    }
+    RPT.notify.toast('当前浏览器不支持剪贴板', 'warning')
+  }
+
   function summarize(unit) {
     if (!unit) return ''
+
+    const parts = []
     const c = unit.content
-    if (typeof c === 'string') return c.slice(0, 120)
-    if (Array.isArray(c)) {
-      const texts = c.filter((b) => b.type === 'text').map((b) => b.text).join(' ')
-      return texts.slice(0, 120) || `[多模态 ${c.length} 块]`
+
+    if (typeof c === 'string') {
+      if (c) parts.push(c.replace(/\s+/g, ' ').slice(0, 120))
+    } else if (Array.isArray(c)) {
+      const texts = c.filter((b) => b && b.type === 'text').map((b) => b.text).join(' ')
+      parts.push(texts.slice(0, 100) || '')
+      parts.push(`[多模态 ${c.length} 块]`)
     }
-    return ''
+
+    if (unit.reasoning_content) parts.push(`[reasoning ${unit.reasoning_content.length} 字]`)
+    if (unit.tool_calls) parts.push(`[tool_calls ${unit.tool_calls.length}]`)
+    if (unit.tool_call_id) parts.push('[tool_call_id]')
+    if (unit.prefix) parts.push('[prefix]')
+
+    return parts.filter(Boolean).join(' ')
+  }
+
+  /* 值的简短描述 */
+  function briefOf(value) {
+    if (value === null) return 'null'
+    if (value === undefined) return '—'
+    if (typeof value === 'boolean') return value ? 'true' : 'false'
+    if (typeof value === 'number') return String(value)
+    if (typeof value === 'string') {
+      const oneLine = value.replace(/\s+/g, ' ')
+      return oneLine.length > 80 ? `${oneLine.slice(0, 80)}…（${value.length} 字）` : oneLine || '（空）'
+    }
+    if (Array.isArray(value)) return `[${value.length} 项]`
+    return `{${Object.keys(value).length} 字段}`
+  }
+
+  /* 字段值：短的直接显示，长的折叠成 details */
+  function fieldValueNode(value) {
+    const text = isObject(value) ? jsonOf(value) : (value === null ? 'null' : String(value))
+    const long = text.length > 80 || text.includes('\n')
+
+    if (!long) {
+      return span({ class: 'ctx-field-value' }, [text || '（空）'])
+    }
+
+    return RPT.dom.el('details', { class: 'ctx-field-details' }, [
+      RPT.dom.el('summary', {}, [span({ class: 'ctx-field-value' }, [briefOf(value)])]),
+      RPT.dom.el('pre', { class: 'ctx-field-pre' }, [text]),
+    ])
   }
 
   /* ---------- 通用：输入对话框 ---------- */
@@ -217,16 +291,22 @@
     if (state.selectedIndex === null) return
     const unit = state.context[state.selectedIndex]
     if (!unit) return
-    const content = typeof unit.content === 'string' ? unit.content : summarize(unit)
+    const content = typeof unit.content === 'string' ? unit.content : jsonOf(unit.content)
     inputDialog({
       title: `重写 [${state.selectedIndex}] ${unit.role}`,
-      label: '新内容',
+      label: Array.isArray(unit.content) ? '新内容（JSON 数组）' : '新内容',
       defaultValue: content,
       multiline: true,
       onOk: async (newContent) => {
+        let value = newContent
+        if (Array.isArray(unit.content)) {
+          try { value = JSON.parse(newContent) } catch {
+            RPT.notify.toast('content JSON 无效', 'danger')
+            return
+          }
+        }
         try {
-          const newUnit = { ...unit, content: newContent }
-          await RPT.apiContext.rewrite(state.userId, state.selectedIndex, newUnit)
+          await RPT.apiContext.rewrite(state.userId, state.selectedIndex, { ...unit, content: value })
           RPT.notify.toast('已重写', 'success')
           await reloadContext()
         } catch (e) { RPT.notify.error(e) }
@@ -252,6 +332,23 @@
         } catch (e) { RPT.notify.error(e) }
       },
     })
+  }
+
+  /* 保存当前选中条目的 content（字符串直接存，多模态按 JSON 存） */
+  async function saveContent(unit, textarea, isBlocks) {
+    let value = textarea.value
+    if (isBlocks) {
+      try { value = JSON.parse(textarea.value) } catch {
+        RPT.notify.toast('content JSON 无效', 'danger')
+        return
+      }
+    }
+
+    try {
+      await RPT.apiContext.rewrite(state.userId, state.selectedIndex, { ...unit, content: value })
+      RPT.notify.toast('已保存', 'success')
+      await reloadContext()
+    } catch (e) { RPT.notify.error(e) }
   }
 
   /* ---------- 渲染：分支栏 ---------- */
@@ -283,7 +380,7 @@
 
   /* ---------- 渲染：左侧列表 ---------- */
   function renderList() {
-    const body = div({ class: 'context-panel-body' })
+    const body = div({ class: 'context-panel-body', dataset: { panel: 'ctx-list' } })
 
     if (state.context.length === 0) {
       body.appendChild(div({ class: 'empty' }, ['暂无上下文']))
@@ -293,13 +390,15 @@
     state.context.forEach((unit, index) => {
       const item = div({
         class: ['ctx-item', index === state.selectedIndex ? 'active' : ''],
-        onClick: () => {
-          state.selectedIndex = index
-          render()
-        },
+        dataset: { index: String(index) },
+        onClick: () => selectItem(index),
       }, [
         span({ class: 'ctx-item-index' }, [`${index}`]),
         span({ class: 'ctx-item-role' }, [String(unit.role)]),
+        unit.role_name ? span({ class: 'ctx-item-tag' }, [unit.role_name]) : null,
+        unit.prefix ? span({ class: 'ctx-item-tag' }, ['prefix']) : null,
+        unit.tool_calls ? span({ class: 'ctx-item-tag' }, ['tool_calls']) : null,
+        unit.tool_call_id ? span({ class: 'ctx-item-tag' }, ['tool_call_id']) : null,
         span({ class: 'ctx-item-summary' }, [summarize(unit)]),
       ])
       body.appendChild(item)
@@ -308,9 +407,48 @@
     return body
   }
 
-  /* ---------- 渲染：右侧详情 ---------- */
+  /* 切换选中项：只更新高亮 + 重建详情，列表不重建（滚动位置不丢） */
+  function selectItem(index) {
+    state.selectedIndex = index
+
+    if (listBodyEl) {
+      listBodyEl.querySelectorAll('.ctx-item').forEach((el) => {
+        el.classList.toggle('active', Number(el.dataset.index) === index)
+      })
+    }
+
+    const fresh = renderDetail()
+    if (detailBodyEl && detailBodyEl.parentNode) {
+      detailBodyEl.replaceWith(fresh)
+    }
+    detailBodyEl = fresh
+  }
+
+  /* ---------- 渲染：详情 ---------- */
+
+  /* 全部字段：已知字段按固定顺序，其余按原样追加 */
+  function renderFields(unit) {
+    const box = div({ class: 'ctx-fields' })
+    const keys = Object.keys(unit)
+    const known = Object.keys(FIELD_LABELS).filter((k) => keys.includes(k))
+    const rest = keys.filter((k) => !FIELD_LABELS[k])
+
+    for (const key of [...known, ...rest]) {
+      box.appendChild(div({ class: 'ctx-field' }, [
+        span({ class: 'ctx-field-key', title: key }, [FIELD_LABELS[key] || key]),
+        fieldValueNode(unit[key]),
+      ]))
+    }
+
+    if (keys.length === 0) {
+      box.appendChild(div({ class: 'ctx-field' }, [span({ class: 'ctx-field-key' }, ['—'])]))
+    }
+
+    return box
+  }
+
   function renderDetail() {
-    const body = div({ class: 'context-panel-body' })
+    const body = div({ class: 'context-panel-body', dataset: { panel: 'ctx-detail' } })
 
     if (state.selectedIndex === null) {
       body.appendChild(div({ class: 'empty' }, ['选择左侧一条查看详情']))
@@ -323,37 +461,61 @@
       return body
     }
 
-    const contentText = typeof unit.content === 'string'
-      ? unit.content
-      : summarize(unit)
+    const isBlocks = Array.isArray(unit.content)
+    const initial = isBlocks
+      ? jsonOf(unit.content)
+      : (typeof unit.content === 'string' ? unit.content : '')
 
-    const textarea = RPT.dom.el('textarea', { class: 'textarea' }, [contentText])
+    const textarea = RPT.dom.el('textarea', {
+      class: 'textarea ctx-content-input',
+      rows: 10,
+      spellcheck: 'false',
+    }, [initial])
 
-    const meta = div({ class: 'ctx-detail-meta' }, [
-      div({}, [`role: ${unit.role}`]),
-      unit.role_name ? div({}, [`role_name: ${unit.role_name}`]) : null,
-      unit.created ? div({}, [`created: ${unit.created}`]) : null,
-      unit.reasoning_content ? div({}, [`reasoning: ${unit.reasoning_content.length} 字`]) : null,
-      Array.isArray(unit.content) ? div({}, [`content: ${unit.content.length} 块`]) : null,
+    const head = div({ class: 'ctx-detail-head' }, [
+      span({ class: 'ctx-detail-index' }, [`#${state.selectedIndex}`]),
+      span({ class: ['ctx-role-badge', `is-${String(unit.role)}`] }, [String(unit.role)]),
+      unit.role_name ? span({ class: 'ctx-detail-tag' }, [unit.role_name]) : null,
+      unit.prefix ? span({ class: 'ctx-detail-tag' }, ['prefix']) : null,
+      unit.tool_calls ? span({ class: 'ctx-detail-tag' }, [`tool_calls ${unit.tool_calls.length}`]) : null,
+      unit.tool_call_id ? span({ class: 'ctx-detail-tag' }, ['tool_call_id']) : null,
+    ])
+
+    const actions = div({ class: 'ctx-detail-actions' }, [
+      button({ class: 'btn btn-primary btn-sm', onClick: () => saveContent(unit, textarea, isBlocks) }, ['保存修改']),
+      button({ class: 'btn btn-sm', onClick: () => {
+        let value = textarea.value
+        if (isBlocks) {
+          try { value = JSON.parse(textarea.value) } catch {
+            RPT.notify.toast('content JSON 无效', 'danger')
+            return
+          }
+        }
+        RPT.apiContext.inject(state.userId, { ...unit, content: value })
+          .then(() => { RPT.notify.toast('已复制到末尾', 'success'); return reloadContext() })
+          .catch((e) => RPT.notify.error(e))
+      } }, ['复制到末尾']),
+      button({ class: 'btn btn-sm', onClick: doRewrite }, ['重写内容…']),
+      button({ class: 'btn btn-sm', onClick: () => copyText(jsonOf(unit)) }, ['复制 JSON']),
+    ])
+
+    const raw = RPT.dom.el('details', { class: 'ctx-raw-box' }, [
+      RPT.dom.el('summary', {}, [`原始 JSON · ${Object.keys(unit).length} 个字段`]),
+      RPT.dom.el('pre', { class: 'ctx-raw' }, [jsonOf(unit)]),
     ])
 
     const detail = div({ class: 'ctx-detail' }, [
-      meta,
-      textarea,
-      div({ class: 'ctx-detail-actions' }, [
-        button({ class: 'btn btn-primary btn-sm', onClick: () => {
-          const newUnit = { ...unit, content: textarea.value }
-          RPT.apiContext.rewrite(state.userId, state.selectedIndex, newUnit)
-            .then(() => { RPT.notify.toast('已保存', 'success'); return reloadContext() })
-            .catch((e) => RPT.notify.error(e))
-        } }, ['保存修改']),
-        button({ class: 'btn btn-sm', onClick: () => {
-          // 复制到末尾
-          RPT.apiContext.inject(state.userId, { ...unit, content: textarea.value })
-            .then(() => { RPT.notify.toast('已复制到末尾', 'success'); return reloadContext() })
-            .catch((e) => RPT.notify.error(e))
-        } }, ['复制到末尾']),
+      head,
+      renderFields(unit),
+      div({ class: 'ctx-content-edit' }, [
+        div({ class: 'ctx-content-label' }, [
+          span({}, [isBlocks ? 'content（多模态 JSON 数组，可直接编辑）' : 'content（文本）']),
+          span({ class: 'text-dim text-xs' }, [`${initial.length} 字`]),
+        ]),
+        textarea,
+        actions,
       ]),
+      raw,
     ])
 
     body.appendChild(detail)
@@ -372,9 +534,15 @@
 
   /* ---------- 主渲染 ---------- */
   function render() {
+    /* 整页重建前记住滚动位置，重建后恢复（数据刷新时保持体验） */
+    const prevListScroll = listBodyEl ? listBodyEl.scrollTop : 0
+    const prevDetailScroll = detailBodyEl ? detailBodyEl.scrollTop : 0
+
     document.body.innerHTML = ''
 
     if (!state.userId) {
+      listBodyEl = null
+      detailBodyEl = null
       const page = div({ class: 'subpage' }, [
         div({ class: 'placeholder' }, [
           div({ class: 'placeholder-title' }, ['未设置 user_id']),
@@ -398,19 +566,23 @@
       button({ class: 'btn btn-sm', onClick: reloadContext },               ['刷新']),
     ])
 
+    listBodyEl = renderList()
+    detailBodyEl = renderDetail()
+
     const layout = div({ class: 'context-layout' }, [
       div({ class: 'context-panel' }, [
-        div({ class: 'context-panel-header' }, [span({}, ['对话列表'])]),
-        renderList(),
+        div({ class: 'context-panel-header' }, [
+          span({}, [`对话列表（${state.context.length}）`]),
+          state.length ? span({ class: 'text-dim text-xs' }, [`共 ${RPT.format.number(state.length.context_length)} 条`]) : null,
+        ]),
+        listBodyEl,
       ]),
       div({ class: 'context-panel' }, [
         div({ class: 'context-panel-header' }, [
           span({}, ['详情']),
-          state.selectedIndex !== null
-            ? button({ class: 'btn btn-sm', onClick: doRewrite }, ['重写选中'])
-            : null,
+          span({ class: 'text-dim text-xs' }, ['点击左侧任意一条查看全部字段']),
         ]),
-        renderDetail(),
+        detailBodyEl,
       ]),
     ])
 
@@ -421,6 +593,9 @@
     ])
 
     document.body.appendChild(page)
+
+    listBodyEl.scrollTop = prevListScroll
+    detailBodyEl.scrollTop = prevDetailScroll
   }
 
   /* ---------- 初始化 ---------- */

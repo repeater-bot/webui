@@ -56,7 +56,48 @@
   function stringifyContent(content) {
     if (typeof content === 'string') return content
     if (content == null) return ''
+
+    if (Array.isArray(content)) {
+      /* 纯字符串数组（工具响应的常见形态）：直接换行拼接 */
+      if (content.every((x) => typeof x === 'string')) return content.join('\n')
+
+      /* ContentBlock 数组：文本块取 text，其它块标注类型 */
+      if (content.every((x) => x && typeof x === 'object' && 'type' in x)) {
+        return content.map((b) => (b.type === 'text' ? (b.text || '') : `[${b.type}]`)).join('\n')
+      }
+    }
+
     try { return JSON.stringify(content, null, 2) } catch { return String(content) }
+  }
+
+  /*
+   * 工具调用统一成 { id, type, name, arguments }
+   * - 流式 Delta：{ id, type, name, arguments, index }（扁平）
+   * - ContentUnit：{ id, type, function: { name, arguments } }（嵌套）
+   */
+  function normalizeToolCall(raw) {
+    const src = raw || {}
+    const fn = src.function || src
+    let args = fn.arguments
+    if (args !== null && args !== undefined && typeof args !== 'string') {
+      try { args = JSON.stringify(args) } catch { args = String(args) }
+    }
+    return {
+      id: src.id || '',
+      type: src.type || 'function',
+      name: fn.name || '',
+      arguments: args || '',
+    }
+  }
+
+  function normalizeToolCalls(list) {
+    return Array.isArray(list) ? list.map(normalizeToolCall) : []
+  }
+
+  /* 参数尽量格式化：能解析成 JSON 就缩进，不能就原样 */
+  function prettyArgs(text) {
+    if (!text) return ''
+    try { return JSON.stringify(JSON.parse(text), null, 2) } catch { return text }
   }
 
   /* ============================================================
@@ -78,15 +119,24 @@
   }
 
   function renderToolCalls(unit) {
-    if (!unit.toolCalls || unit.toolCalls.length === 0) return null
+    const calls = normalizeToolCalls(unit.toolCalls)
+    if (calls.length === 0) return null
+
     const wrap = div({ class: 'chat-tools' })
-    for (const tc of unit.toolCalls) {
-      const item = div({ class: 'chat-tool' }, [
+
+    for (const tc of calls) {
+      const args = prettyArgs(tc.arguments)
+      const body = RPT.dom.el('pre', { class: 'chat-tool-args' }, [args || '（无参数）'])
+
+      const head = div({ class: 'chat-tool-head' }, [
+        span({ class: 'chat-tool-badge' }, ['工具调用']),
         span({ class: 'chat-tool-name' }, [tc.name || '(unknown)']),
-        div({ class: 'chat-tool-args' }, [tc.arguments || '']),
+        tc.id ? span({ class: 'chat-tool-id', title: tc.id }, [tc.id]) : null,
       ])
-      wrap.appendChild(item)
+
+      wrap.appendChild(div({ class: 'chat-tool' }, [head, body]))
     }
+
     return wrap
   }
 
@@ -96,6 +146,7 @@
     const head = div({ class: 'chat-msg-head' }, [
       span({ class: ['chat-msg-role', unit.role] }, [unit.role]),
       unit.roleName ? span({}, [unit.roleName]) : null,
+      unit.toolCallId ? span({ class: 'chat-msg-tag', title: 'tool_call_id' }, [unit.toolCallId]) : null,
       unit.streaming ? span({ class: 'text-accent' }, [span({ class: 'status-dot is-live' }), '生成中']) : null,
     ])
     msg.appendChild(head)
@@ -103,6 +154,7 @@
     const reasoning = renderReasoning(unit)
     if (reasoning) msg.appendChild(reasoning)
 
+    /* 正文只放 content：工具调用单独成块，不混进正文 */
     if (unit.content) {
       const body = div({ class: 'chat-msg-body' })
       if (unit.role === 'assistant') {
@@ -252,33 +304,50 @@
     }
   }
 
+  /*
+   * ContentUnit（Tool 响应）判定：
+   * - 一定带 role
+   * - 不带 Delta 专属字段（id / model / token_usage）
+   * 注意：ContentUnit 也带 created，所以不能拿 created 判断——
+   * 旧逻辑会把工具响应当成 Delta，把它的 content 拼进正文里，正文和工具调用就混在一起了
+   */
+  function isContentUnit(chunk) {
+    if (!chunk || typeof chunk !== 'object' || !chunk.role) return false
+    return !('id' in chunk) && !('model' in chunk) && !('token_usage' in chunk)
+  }
+
   function handleChunk(chunk, assistant, messagesEl) {
     if (!chunk || typeof chunk !== 'object') return
 
-    /* ContentUnit（Tool 响应）：有 role 且没有 finish_reason */
-    if (chunk.role && !chunk.id && !chunk.created) {
+    if (isContentUnit(chunk)) {
       state.messages.push({
         role: chunk.role,
         roleName: chunk.role_name,
         content: stringifyContent(chunk.content),
-        reasoning: chunk.reasoning_content || '',
-        toolCalls: chunk.tool_calls || [],
+        reasoning: typeof chunk.reasoning_content === 'string' ? chunk.reasoning_content : '',
+        toolCalls: normalizeToolCalls(chunk.tool_calls),
+        toolCallId: chunk.tool_call_id || '',
       })
       renderMessages(messagesEl)
       return
     }
 
-    /* Delta */
-    if (chunk.reasoning_content) assistant.reasoning += chunk.reasoning_content
-    if (chunk.content) assistant.content += chunk.content
+    /* Delta：只吃字符串，避免数组被当成字符串拼进正文 */
+    if (typeof chunk.reasoning_content === 'string') assistant.reasoning += chunk.reasoning_content
+    if (typeof chunk.content === 'string') assistant.content += chunk.content
 
-    if (chunk.tool_calls && Array.isArray(chunk.tool_calls)) {
-      for (const tc of chunk.tool_calls) {
+    if (Array.isArray(chunk.tool_calls)) {
+      for (const raw of chunk.tool_calls) {
+        const tc = normalizeToolCall(raw)
         let existing = assistant.toolCalls[assistant.toolCalls.length - 1]
-        if (!existing || (tc.id && existing.id !== tc.id)) {
-          existing = { id: tc.id || '', name: tc.name || '', arguments: '' }
+        const sameCall = existing && (!tc.id || existing.id === tc.id)
+
+        if (!existing || !sameCall) {
+          existing = { id: tc.id || '', type: tc.type || 'function', name: tc.name || '', arguments: '' }
           assistant.toolCalls.push(existing)
         }
+
+        if (tc.id) existing.id = tc.id
         if (tc.name) existing.name = tc.name
         if (tc.arguments) existing.arguments += tc.arguments
       }
@@ -295,7 +364,8 @@
           roleName: unit.role_name,
           content: stringifyContent(unit.content),
           reasoning: unit.reasoning_content || '',
-          toolCalls: unit.tool_calls || [],
+          toolCalls: normalizeToolCalls(unit.tool_calls),
+          toolCallId: unit.tool_call_id || '',
         })
       }
     } else {

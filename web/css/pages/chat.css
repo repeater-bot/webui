@@ -108,6 +108,8 @@
     border-left-color: var(--warning);
     font-family: var(--font-mono);
     font-size: var(--fs-xs);
+    white-space: pre-wrap;
+    word-break: break-word;
   }
 
   /* reasoning 折叠 */
@@ -153,11 +155,9 @@
 
   .chat-reasoning.open .chat-reasoning-body { display: block; }
 
-  /* tool_calls 时间线 */
+  /* tool_calls：独立卡片，和正文分开 */
   .chat-tools {
     margin-top: var(--gap-sm);
-    border-left: 3px solid var(--warning);
-    padding-left: var(--gap);
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -168,8 +168,25 @@
     font-family: var(--font-mono);
     color: var(--text-dim);
     background: var(--bg-code);
-    padding: 6px 10px;
     border: 1px solid var(--border);
+    border-left: 3px solid var(--warning);
+  }
+
+  .chat-tool-head {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chat-tool-badge {
+    flex: none;
+    padding: 1px 6px;
+    font-family: var(--font);
+    font-size: var(--fs-xs);
+    color: #fff;
+    background: var(--warning);
   }
 
   .chat-tool-name {
@@ -177,11 +194,41 @@
     font-weight: 600;
   }
 
+  .chat-tool-id {
+    margin-left: auto;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-dim);
+    opacity: 0.75;
+  }
+
   .chat-tool-args {
+    margin: 0;
+    padding: 8px 10px;
+    max-height: 260px;
+    overflow: auto;
     white-space: pre-wrap;
-    word-break: break-all;
-    margin-top: 4px;
+    word-break: break-word;
     color: var(--text);
+    font-family: var(--font-mono);
+    font-size: var(--fs-xs);
+    line-height: 1.6;
+  }
+
+  /* 消息头的小标签（例如 tool_call_id） */
+  .chat-msg-tag {
+    max-width: 40%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 6px;
+    font-size: var(--fs-xs);
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    background: var(--bg-code);
   }
 
   /* 底部输入 */
